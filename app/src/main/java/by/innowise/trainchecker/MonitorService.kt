@@ -41,6 +41,7 @@ class MonitorService : Service() {
     private var monitoringJob: Job? = null
     private var lastStatus = false
     private val logDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+    private var lastHeartbeatTime = System.currentTimeMillis()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -62,6 +63,8 @@ class MonitorService : Service() {
         if (monitoringJob?.isActive == true) return
 
         sendLogToActivity("🚂 Мониторинг мест на поезда запущен! Отслеживаю URL: $MONITORING_URL")
+
+
         monitoringJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 try {
@@ -95,11 +98,16 @@ class MonitorService : Service() {
                         lastStatus = true
                     } else {
                         sendLogToActivity("Места НЕ найдены. Количество кнопок: $buttonCount")
-                        Log.d("MonitorService", "Запрос отправлен в ${LocalDateTime.now()}")
                         if (lastStatus) {
                             sendTelegramMessage("❌ Места закончились")
                         }
                         lastStatus = false
+                    }
+
+                    val now = System.currentTimeMillis()
+                    if (now - lastHeartbeatTime >= 30 * 60 * 1000) { // 30 минут в миллисекундах
+                        sendTelegramMessage("🟢 Приложение работает нормально, мониторинг активен.")
+                        lastHeartbeatTime = now
                     }
                 } catch (e: Exception) {
                     sendTelegramMessage("⚠ Ошибка при проверке мест: ${e.message}")
