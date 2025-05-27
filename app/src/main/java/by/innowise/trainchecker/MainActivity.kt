@@ -28,10 +28,33 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val savedToken = TelegramPreferenceManager.getToken(this)
+        val savedChatId = TelegramPreferenceManager.getChatId(this)
+
+        if (savedToken != null) {
+            binding.editToken.setText(savedToken)
+        }
+
+        if (savedChatId != null) {
+            binding.editChatId.setText(savedChatId)
+        }
+
         binding.buttonStart.setOnClickListener {
-            val url = binding.editUrl.text.toString()
             val token = binding.editToken.text.toString()
             val chatId = binding.editChatId.text.toString()
+
+            if (token.isNotBlank()) {
+                TelegramPreferenceManager.saveToken(this, token)
+            }
+
+            if (chatId.isNotBlank()) {
+                TelegramPreferenceManager.saveChatId(this, chatId)
+            }
+
+            val usedToken = token.ifBlank { TelegramPreferenceManager.getToken(this).orEmpty() }
+            val usedChatId = chatId.ifBlank { TelegramPreferenceManager.getChatId(this).orEmpty() }
+
+            val url = binding.editUrl.text.toString()
             val buttonThreshold = binding.editButtonThreshold.text.toString().toIntOrNull() ?: 1
             val checkInterval = binding.editCheckInterval.text.toString().toLongOrNull() ?: 15L
             val healthInterval = binding.editHealthInterval.text.toString().toLongOrNull() ?: 5L
@@ -39,8 +62,8 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, MonitorService::class.java).apply {
                 action = MonitorService.ACTION_START
                 putExtra("url", url)
-                putExtra("token", token)
-                putExtra("chatId", chatId)
+                putExtra("token", usedToken)
+                putExtra("chatId", usedChatId)
                 putExtra("buttonThreshold", buttonThreshold)
                 putExtra("checkInterval", checkInterval)
                 putExtra("healthInterval", healthInterval)
@@ -48,12 +71,13 @@ class MainActivity : AppCompatActivity() {
 
             startForegroundService(intent)
         }
-
         binding.buttonStop.setOnClickListener {
-            val intent = Intent(this, MonitorService::class.java)
-            intent.action = MonitorService.ACTION_STOP
-            startForegroundService(intent) // чтобы корректно отправить команду сервису
+            val stopIntent = Intent(this, MonitorService::class.java).apply {
+                action = MonitorService.ACTION_STOP
+            }
+            startService(stopIntent)
         }
+
     }
 
     override fun onStart() {
