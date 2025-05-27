@@ -5,9 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import by.innowise.trainchecker.databinding.ActivityMainBinding
+import java.net.URLDecoder
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -55,6 +57,18 @@ class MainActivity : AppCompatActivity() {
             val usedChatId = chatId.ifBlank { TelegramPreferenceManager.getChatId(this).orEmpty() }
 
             val url = binding.editUrl.text.toString()
+
+            val decodedUrl = try {
+                URLDecoder.decode(url, "UTF-8")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Ошибка декодирования URL: ${e.message}")
+                url // если ошибка — используем исходный URL
+            }
+
+            // Логируем для проверки
+            Log.d("MainActivity", "Исходный URL: $url")
+            Log.d("MainActivity", "Декодированный URL: $decodedUrl")
+
             val buttonThreshold = binding.editButtonThreshold.text.toString().toIntOrNull() ?: 1
             val checkInterval = binding.editCheckInterval.text.toString().toLongOrNull() ?: 15L
             val healthInterval = binding.editHealthInterval.text.toString().toLongOrNull() ?: 5L

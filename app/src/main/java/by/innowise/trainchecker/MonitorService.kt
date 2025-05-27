@@ -15,6 +15,8 @@ import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.random.Random
@@ -140,10 +142,15 @@ class MonitorService : Service() {
     }
 
     private fun sendTelegramMessage(message: String) {
-        val url = "https://api.telegram.org/bot$telegramToken/sendMessage?chat_id=$chatId&text=${message.replace(" ", "%20")}"
         try {
+            // Кодируем текст сообщения в URL-формат с UTF-8
+            val encodedMessage = URLEncoder.encode(message, StandardCharsets.UTF_8.toString())
+
+            val url = "https://api.telegram.org/bot$telegramToken/sendMessage?chat_id=$chatId&text=$encodedMessage"
+
             val request = Request.Builder().url(url).build()
             client.newCall(request).execute()
+
         } catch (e: Exception) {
             sendLogToActivity("Ошибка отправки сообщения в Telegram: ${e.message}")
         }
