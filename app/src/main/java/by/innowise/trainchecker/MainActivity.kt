@@ -28,6 +28,17 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (intent?.action == "OPEN_FROM_NOTIFICATION") {
+            val activeRouteIds = MonitorService.getActiveRoutes(this)
+            if (activeRouteIds.isNotEmpty()) {
+                val activeRoute = routes.find { it.id == activeRouteIds.first() }
+                activeRoute?.let {
+                    showRouteDetails(it)
+                }
+            }
+        }
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -105,9 +116,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun deleteRoute(routeId: Long) {
+        stopMonitoring(routeId)
         val updatedRoutes = routes.filter { it.id != routeId }
         MonitoringPreferenceManager.saveRoutes(this, updatedRoutes)
         loadRoutes()
+        if (updatedRoutes.none { it.isActive }) {
+            val stopIntent = Intent(this, MonitorService::class.java).apply {
+                action = MonitorService.ACTION_STOP_ALL
+            }
+            startService(stopIntent)
+        }
     }
 
     override fun onResume() {

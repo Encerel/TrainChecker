@@ -1,5 +1,6 @@
 package by.innowise.trainchecker
 
+import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -33,8 +34,14 @@ class MonitorService : Service() {
     companion object {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
+        const val ACTION_STOP_ALL = "ACTION_STOP_ALL"
         const val CHANNEL_ID = "MonitorServiceChannel"
         const val NOTIF_ID = 1
+
+        fun getActiveRoutes(context: Context): List<Long> {
+            val prefs = context.getSharedPreferences("monitor_service", Context.MODE_PRIVATE)
+            return prefs.getStringSet("active_routes", emptySet())?.map { it.toLong() } ?: emptyList()
+        }
     }
 
     private val activeMonitors = mutableMapOf<Long, Job>()
@@ -62,15 +69,27 @@ class MonitorService : Service() {
                     stopMonitoring(routeId)
                 }
             }
+            ACTION_STOP_ALL -> {
+                stopAllMonitoring()
+                stopSelf()
+            }
         }
         return START_STICKY
     }
 
+
+
     private fun startMonitoring(routeId: Long) {
+
         if (activeMonitors.containsKey(routeId)) return
 
         val routes = MonitoringPreferenceManager.getRoutes(this)
         val route = routes.find { it.id == routeId } ?: return
+
+        if (routes.none { it.id == routeId }) {
+            stopMonitoring(routeId)
+            return
+        }
 
         val job = CoroutineScope(Dispatchers.IO).launch {
             var lastStatus = false
@@ -141,7 +160,10 @@ class MonitorService : Service() {
     private fun stopAllMonitoring() {
         activeMonitors.values.forEach { it.cancel() }
         activeMonitors.clear()
-        stopForeground(true)
+        updateNotification()
+        getSharedPreferences("monitor_service", Context.MODE_PRIVATE).edit()
+            .remove("active_routes")
+            .apply()
     }
 
     private fun sendTelegramMessage(route: MonitoringRoute, message: String) {
@@ -188,12 +210,15 @@ class MonitorService : Service() {
             return
         }
 
-        createNotificationChannel()
-        val notification = createNotification(
-            "Мониторинг ${activeMonitors.size} маршрутов"
-        )
-        notificationManager.notify(NOTIF_ID, notification)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("TrainChecker: ${activeMonitors.size} активных маршрутов")
+            .setSmallIcon(R.drawable.ic_notification_clear_all)
+            .setContentIntent(createNotificationIntent())
+            .setOngoing(true)
+            .build()
+
         startForeground(NOTIF_ID, notification)
+        updateActiveRoutes()
     }
 
     private fun createNotificationChannel() {
@@ -217,11 +242,32 @@ class MonitorService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TrainChecker")
             .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_menu_crop)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
     }
+
+    private fun updateActiveRoutes() {
+        getSharedPreferences("monitor_service", Context.MODE_PRIVATE).edit()
+            .putStringSet("active_routes", activeMonitors.keys.map { it.toString() }.toSet())
+            .apply()
+    }
+
+    private fun createNotificationIntent(): PendingIntent {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = "OPEN_FROM_NOTIFICATION"
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+
 
     override fun onDestroy() {
         super.onDestroy()
