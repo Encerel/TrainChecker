@@ -5,13 +5,20 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import kotlinx.coroutines.*
+import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
@@ -21,75 +28,60 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.random.Random
 
-class MonitorService : Service() {
 
+class MonitorService : Service() {
     companion object {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
         const val CHANNEL_ID = "MonitorServiceChannel"
         const val NOTIF_ID = 1
-
-
-        private val USER_AGENTS = listOf(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-            "Mozilla/5.0 (Linux; Android 10; SM-G980F)"
-        )
     }
 
-    private var url: String = ""
-    private var telegramToken: String = ""
-    private var chatId: String = ""
-    private var buttonThreshold: Int = 2
-    private var checkIntervalSec: Long = 15
-    private var healthIntervalMin: Long = 30
-
+    private val activeMonitors = mutableMapOf<Long, Job>()
     private val client = OkHttpClient()
-    private var monitoringJob: Job? = null
-    private var lastStatus = false
-    private val logDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
-    private var lastHeartbeatTime = System.currentTimeMillis()
+    private val gson = Gson()
+    private val notificationManager by lazy {
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        createNotificationChannel()
-        startForeground(NOTIF_ID, createNotification("TrainChecker активен"))
-
         when (intent?.action) {
             ACTION_START -> {
-                url = intent.getStringExtra("url") ?: return START_STICKY
-                telegramToken = intent.getStringExtra("token") ?: return START_STICKY
-                chatId = intent.getStringExtra("chatId") ?: return START_STICKY
-                buttonThreshold = intent.getIntExtra("buttonThreshold", 2)
-                checkIntervalSec = intent.getLongExtra("checkInterval", 15)
-                healthIntervalMin = intent.getLongExtra("healthInterval", 30)
-                startMonitoring()
+                val routeId = intent.getLongExtra("route_id", -1)
+                if (routeId != -1L) {
+                    startMonitoring(routeId)
+                }
             }
-            ACTION_STOP -> stopMonitoring()
+            ACTION_STOP -> {
+                val routeId = intent.getLongExtra("route_id", -1)
+                if (routeId == -1L) {
+                    stopAllMonitoring()
+                } else {
+                    stopMonitoring(routeId)
+                }
+            }
         }
         return START_STICKY
     }
 
-    private fun startMonitoring() {
-        createNotificationChannel()
-        startForeground(NOTIF_ID, createNotification("Мониторинг запущен"))
+    private fun startMonitoring(routeId: Long) {
+        if (activeMonitors.containsKey(routeId)) return
 
-        if (monitoringJob?.isActive == true) return
+        val routes = MonitoringPreferenceManager.getRoutes(this)
+        val route = routes.find { it.id == routeId } ?: return
 
-        sendLogToActivity("🚂 Мониторинг мест на поезда запущен! Отслеживаю URL: $url")
+        val job = CoroutineScope(Dispatchers.IO).launch {
+            var lastStatus = false
+            var lastHeartbeatTime = System.currentTimeMillis()
 
-
-        monitoringJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 try {
-                    // Случайная задержка 1-5 сек для обхода блокировок
                     delay(1000L + Random.nextLong(4000L))
 
-                    val userAgent = USER_AGENTS.random()
                     val request = Request.Builder()
-                        .url(url)
-                        .header("User-Agent", userAgent)
+                        .url(route.url)
                         .build()
 
                     val response = client.newCall(request).execute()
@@ -97,85 +89,125 @@ class MonitorService : Service() {
 
                     val doc = Jsoup.parse(html)
                     val forms = doc.select("form.js-sch-item-form")
-                    var buttonCount = 0
-
-                    for (form in forms) {
-                        val button = form.selectFirst("a.btn.btn-index:contains(Выбрать места)")
-                        if (button != null) buttonCount++
+                    val buttonCount = forms.count { form ->
+                        form.selectFirst("a.btn.btn-index:contains(Выбрать места)") != null
                     }
 
-                    if (buttonCount >= buttonThreshold) {
+                    if (buttonCount >= route.buttonThreshold) {
                         if (!lastStatus) {
-                            val message = "✅ Найдено $buttonCount поезда со свободными местами!\nСсылка для бронирования: $url"
-                            sendTelegramMessage(message)
-                            sendLogToActivity("МЕСТА НАЙДЕНЫ. Количество кнопок: $buttonCount")
+                            val message = "✅ На маршруте ${route.name} найдено $buttonCount поездов со свободными местами!\nСсылка: ${route.url}"
+                            sendTelegramMessage(route, message)
+                            sendLog(routeId, "МЕСТА НАЙДЕНЫ. Количество кнопок: $buttonCount")
                         }
                         lastStatus = true
                     } else {
-                        sendLogToActivity("Места НЕ найдены. Количество кнопок: $buttonCount")
+                        sendLog(routeId, "Места НЕ найдены. Количество кнопок: $buttonCount")
                         if (lastStatus) {
-                            sendTelegramMessage("❌ Места закончились")
+                            sendTelegramMessage(route, "❌ На маршруте ${route.name} места закончились")
                         }
                         lastStatus = false
                     }
 
+                    // Healthcheck
                     val now = System.currentTimeMillis()
-                    if (now - lastHeartbeatTime >= healthIntervalMin * 60 * 1000) {
-                        sendTelegramMessage("🟢 Приложение работает нормально, мониторинг активен.")
+                    if (now - lastHeartbeatTime >= route.healthIntervalMin * 60 * 1000) {
+                        sendTelegramMessage(route, "🟢 Мониторинг маршрута ${route.name} активен")
                         lastHeartbeatTime = now
                     }
                 } catch (e: Exception) {
-                    sendTelegramMessage("⚠ Ошибка при проверке мест: ${e.message}")
-                    sendLogToActivity("Ошибка: ${e.message}")
+                    sendLog(routeId, "Ошибка: ${e.message}")
+                    sendTelegramMessage(route, "⚠ Ошибка при проверке маршрута ${route.name}: ${e.message}")
                 }
-                delay(checkIntervalSec)
+                delay(route.checkIntervalSec * 1000)
+
+
             }
         }
+
+        activeMonitors[routeId] = job
+        updateNotification()
+        sendLog(routeId, "Мониторинг запущен")
+        updateRouteStatus(routeId, true)
     }
 
-    private fun stopMonitoring() {
-        monitoringJob?.cancel()
-        monitoringJob = null
+    private fun stopMonitoring(routeId: Long) {
+        activeMonitors[routeId]?.cancel()
+        activeMonitors.remove(routeId)
+        updateRouteStatus(routeId, false)
+        updateNotification()
+        sendLog(routeId, "Мониторинг остановлен")
+    }
+
+    private fun stopAllMonitoring() {
+        activeMonitors.values.forEach { it.cancel() }
+        activeMonitors.clear()
         stopForeground(true)
-        stopSelf()
-        sendLogToActivity("Мониторинг остановлен пользователем")
     }
 
-    private fun sendTelegramMessage(message: String) {
+    private fun sendTelegramMessage(route: MonitoringRoute, message: String) {
         try {
-            // Кодируем текст сообщения в URL-формат с UTF-8
             val encodedMessage = URLEncoder.encode(message, StandardCharsets.UTF_8.toString())
-
-            val url = "https://api.telegram.org/bot$telegramToken/sendMessage?chat_id=$chatId&text=$encodedMessage"
+            val url = "https://api.telegram.org/bot${route.telegramToken}/sendMessage?chat_id=${route.chatId}&text=$encodedMessage"
 
             val request = Request.Builder().url(url).build()
             client.newCall(request).execute()
-
         } catch (e: Exception) {
-            sendLogToActivity("Ошибка отправки сообщения в Telegram: ${e.message}")
+            Log.e("MonitorService", "Ошибка отправки в Telegram", e)
         }
     }
 
-    private fun sendLogToActivity(message: String) {
-        val intent = Intent("LOG_UPDATE")
-        intent.putExtra("log_message", message)
+    private fun sendLog(routeId: Long, message: String) {
+        val time = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME)
+        val logMessage = "$time: $message"
+
+        val intent = Intent("LOG_UPDATE").apply {
+            putExtra("route_id", routeId)
+            putExtra("log_message", logMessage)
+        }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
+    private fun updateRouteStatus(routeId: Long, isActive: Boolean) {
+        // 1. Обновляем в SharedPreferences
+        val routes = MonitoringPreferenceManager.getRoutes(this).toMutableList()
+        routes.replaceAll {
+            if (it.id == routeId) it.copy(isActive = isActive) else it
+        }
+        MonitoringPreferenceManager.saveRoutes(this, routes)
+
+        val intent = Intent("ROUTE_STATUS_UPDATE").apply {
+            putExtra("route_id", routeId)
+            putExtra("is_active", isActive)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
+    private fun updateNotification() {
+        if (activeMonitors.isEmpty()) {
+            stopForeground(true)
+            return
+        }
+
+        createNotificationChannel()
+        val notification = createNotification(
+            "Мониторинг ${activeMonitors.size} маршрутов"
+        )
+        notificationManager.notify(NOTIF_ID, notification)
+        startForeground(NOTIF_ID, notification)
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Мониторинг мест",
+                "Мониторинг маршрутов",
                 NotificationManager.IMPORTANCE_LOW
             )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(channel)
         }
     }
 
     private fun createNotification(contentText: String): Notification {
-        // Intent для открытия Activity при тапе на уведомление
         val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, notificationIntent,
@@ -185,10 +217,14 @@ class MonitorService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TrainChecker")
             .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)  // Можно заменить на свой ресурс
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        stopAllMonitoring()
+    }
 }

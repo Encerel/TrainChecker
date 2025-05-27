@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <EditText
+            android:id="@+id/editUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="URL"
+            android:inputType="textUri" />
+
+        <EditText
+            android:id="@+id/editToken"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Telegram Bot Token"
+            android:inputType="text" />
+
+        <EditText
+            android:id="@+id/editChatId"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Chat ID"
+            android:inputType="text" />
+
+        <EditText
+            android:id="@+id/editButtonThreshold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Минимум кнопок (по умолчанию 1)"
+            android:inputType="number" />
+
+        <EditText
+            android:id="@+id/editCheckInterval"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Интервал проверки в сек (по умолчанию 15)"
+            android:inputType="number" />
+
+        <EditText
+            android:id="@+id/editHealthInterval"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Интервал healthcheck в мин (по умолчанию 30)"
+            android:inputType="number" />
+
+        <Button
+            android:id="@+id/buttonCreate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Создать мониторинг" />
+    </LinearLayout>
+</ScrollView>

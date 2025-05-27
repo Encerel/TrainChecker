@@ -44,13 +44,13 @@ android {
 
 dependencies {
 
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
+    implementation(libs.gson)
+    implementation(libs.jsoup)
+    implementation(libs.okhttp)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.localbroadcastmanager)
+    implementation(libs.kotlinx.coroutines.android)
 
-    implementation(libs.jsoup) // HTML parser
-    implementation(libs.okhttp) // HTTP client
-    implementation(libs.androidx.lifecycle.runtime.ktx) // для корутин, если надо
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
