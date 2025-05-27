@@ -27,15 +27,20 @@ class MonitorService : Service() {
         const val CHANNEL_ID = "MonitorServiceChannel"
         const val NOTIF_ID = 1
 
-        private const val TELEGRAM_BOT_TOKEN = "8174644064:AAHxzUnEWjyb0NpMSMMNHPOUQ7TaPPTgB_0"
-        private const val CHAT_ID = "587148605"
-        private const val MONITORING_URL = "https://pass.rw.by/ru/route/?from=Пинск&from_exp=2100180&from_esr=133202&to=Минск&to_exp=2100000&to_esr=140210&date=2025-06-15&type=1"
+
         private val USER_AGENTS = listOf(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
             "Mozilla/5.0 (Linux; Android 10; SM-G980F)"
         )
     }
+
+    private var url: String = ""
+    private var telegramToken: String = ""
+    private var chatId: String = ""
+    private var buttonThreshold: Int = 2
+    private var checkIntervalSec: Long = 15
+    private var healthIntervalMin: Long = 30
 
     private val client = OkHttpClient()
     private var monitoringJob: Job? = null
@@ -50,7 +55,15 @@ class MonitorService : Service() {
         startForeground(NOTIF_ID, createNotification("TrainChecker активен"))
 
         when (intent?.action) {
-            ACTION_START -> startMonitoring()
+            ACTION_START -> {
+                url = intent.getStringExtra("url") ?: return START_STICKY
+                telegramToken = intent.getStringExtra("token") ?: return START_STICKY
+                chatId = intent.getStringExtra("chatId") ?: return START_STICKY
+                buttonThreshold = intent.getIntExtra("buttonThreshold", 2)
+                checkIntervalSec = intent.getLongExtra("checkInterval", 15)
+                healthIntervalMin = intent.getLongExtra("healthInterval", 30)
+                startMonitoring()
+            }
             ACTION_STOP -> stopMonitoring()
         }
         return START_STICKY
@@ -62,7 +75,7 @@ class MonitorService : Service() {
 
         if (monitoringJob?.isActive == true) return
 
-        sendLogToActivity("🚂 Мониторинг мест на поезда запущен! Отслеживаю URL: $MONITORING_URL")
+        sendLogToActivity("🚂 Мониторинг мест на поезда запущен! Отслеживаю URL: $url")
 
 
         monitoringJob = CoroutineScope(Dispatchers.IO).launch {
@@ -73,7 +86,7 @@ class MonitorService : Service() {
 
                     val userAgent = USER_AGENTS.random()
                     val request = Request.Builder()
-                        .url(MONITORING_URL)
+                        .url(url)
                         .header("User-Agent", userAgent)
                         .build()
 
@@ -89,9 +102,9 @@ class MonitorService : Service() {
                         if (button != null) buttonCount++
                     }
 
-                    if (buttonCount >= 2) {
+                    if (buttonCount >= buttonThreshold) {
                         if (!lastStatus) {
-                            val message = "✅ Найдено $buttonCount поезда со свободными местами!\nСсылка для бронирования: $MONITORING_URL"
+                            val message = "✅ Найдено $buttonCount поезда со свободными местами!\nСсылка для бронирования: $url"
                             sendTelegramMessage(message)
                             sendLogToActivity("МЕСТА НАЙДЕНЫ. Количество кнопок: $buttonCount")
                         }
@@ -105,7 +118,7 @@ class MonitorService : Service() {
                     }
 
                     val now = System.currentTimeMillis()
-                    if (now - lastHeartbeatTime >= 30 * 60 * 1000) { // 30 минут в миллисекундах
+                    if (now - lastHeartbeatTime >= healthIntervalMin * 60 * 1000) {
                         sendTelegramMessage("🟢 Приложение работает нормально, мониторинг активен.")
                         lastHeartbeatTime = now
                     }
@@ -113,7 +126,7 @@ class MonitorService : Service() {
                     sendTelegramMessage("⚠ Ошибка при проверке мест: ${e.message}")
                     sendLogToActivity("Ошибка: ${e.message}")
                 }
-                delay(15_000L) // 15 секунд между проверками
+                delay(checkIntervalSec)
             }
         }
     }
@@ -126,15 +139,13 @@ class MonitorService : Service() {
         sendLogToActivity("Мониторинг остановлен пользователем")
     }
 
-    private fun sendTelegramMessage(text: String) {
+    private fun sendTelegramMessage(message: String) {
+        val url = "https://api.telegram.org/bot$telegramToken/sendMessage?chat_id=$chatId&text=${message.replace(" ", "%20")}"
         try {
-            val url = "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" +
-                    "?chat_id=$CHAT_ID&text=${java.net.URLEncoder.encode(text, "UTF-8")}"
-
             val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().close()
+            client.newCall(request).execute()
         } catch (e: Exception) {
-            sendLogToActivity("Ошибка отправки в Telegram: ${e.message}")
+            sendLogToActivity("Ошибка отправки сообщения в Telegram: ${e.message}")
         }
     }
 

@@ -6,31 +6,78 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <Button
-        android:id="@+id/buttonStart"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Запустить мониторинг" />
 
-    <Button
-        android:id="@+id/buttonStop"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Отключить мониторинг" />
-
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#EEE"
-        android:padding="8dp">
-
-        <TextView
-            android:id="@+id/logTextView"
+        <LinearLayout
+            android:id="@+id/linearLayout"
+            android:orientation="vertical"
+            android:padding="16dp"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="14sp"
-            android:typeface="monospace"
-            android:textColor="#000" />
-    </ScrollView>
+            android:layout_height="wrap_content">
+
+            <EditText
+                android:id="@+id/editUrl"
+                android:hint="URL"
+                android:inputType="textUri"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <EditText
+                android:id="@+id/editToken"
+                android:hint="Telegram Bot Token"
+                android:inputType="text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <EditText
+                android:id="@+id/editChatId"
+                android:hint="Chat ID"
+                android:inputType="text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <EditText
+                android:id="@+id/editButtonThreshold"
+                android:hint="Минимум кнопок"
+                android:inputType="number"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <EditText
+                android:id="@+id/editCheckInterval"
+                android:hint="Интервал проверки (сек)"
+                android:inputType="number"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <EditText
+                android:id="@+id/editHealthInterval"
+                android:hint="Интервал healthcheck (мин)"
+                android:inputType="number"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <Button
+                android:id="@+id/buttonStart"
+                android:text="Старт"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <Button
+                android:id="@+id/buttonStop"
+                android:text="Стоп"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+            <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+            <TextView
+                android:id="@+id/logTextView"
+                android:text="Логи:"
+                android:layout_marginTop="16dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+            </ScrollView>
+        </LinearLayout>
+
+
 </LinearLayout>

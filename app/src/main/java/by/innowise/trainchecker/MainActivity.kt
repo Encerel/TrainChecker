@@ -29,8 +29,23 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.buttonStart.setOnClickListener {
-            val intent = Intent(this, MonitorService::class.java)
-            intent.action = MonitorService.ACTION_START
+            val url = binding.editUrl.text.toString()
+            val token = binding.editToken.text.toString()
+            val chatId = binding.editChatId.text.toString()
+            val buttonThreshold = binding.editButtonThreshold.text.toString().toIntOrNull() ?: 1
+            val checkInterval = binding.editCheckInterval.text.toString().toLongOrNull() ?: 15L
+            val healthInterval = binding.editHealthInterval.text.toString().toLongOrNull() ?: 5L
+
+            val intent = Intent(this, MonitorService::class.java).apply {
+                action = MonitorService.ACTION_START
+                putExtra("url", url)
+                putExtra("token", token)
+                putExtra("chatId", chatId)
+                putExtra("buttonThreshold", buttonThreshold)
+                putExtra("checkInterval", checkInterval)
+                putExtra("healthInterval", healthInterval)
+            }
+
             startForegroundService(intent)
         }
 
