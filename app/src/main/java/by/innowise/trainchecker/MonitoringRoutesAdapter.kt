@@ -4,6 +4,9 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import by.innowise.trainchecker.databinding.ItemRouteBinding
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 class MonitoringRoutesAdapter(
@@ -28,8 +31,6 @@ class MonitoringRoutesAdapter(
     override fun onBindViewHolder(holder: RouteViewHolder, position: Int) {
         val route = routes[position]
 
-
-
         holder.binding.apply {
             val parts = route.name.split(", ")
             if (parts.size == 2) {
@@ -42,6 +43,9 @@ class MonitoringRoutesAdapter(
 
             routeName.text = route.name
             routeStatus.text = if (route.isActive) "Активен" else "Не активен"
+
+            routeCreationDate.text = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+                .format(Date(route.createdAt))
 
             buttonStart.isEnabled = !route.isActive
             buttonStop.isEnabled = route.isActive

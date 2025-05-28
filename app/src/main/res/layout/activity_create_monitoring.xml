@@ -41,14 +41,14 @@
             android:id="@+id/editCheckInterval"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Интервал проверки в сек (по умолчанию 15)"
+            android:hint="Интервал проверки в сек (15 по умолчанию)"
             android:inputType="number" />
 
         <EditText
             android:id="@+id/editHealthInterval"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Интервал healthcheck в мин (по умолчанию 30)"
+            android:hint="Интервал healthcheck в мин (30 по умолчанию)"
             android:inputType="number" />
 
         <Button

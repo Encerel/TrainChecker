@@ -3,6 +3,7 @@ package by.innowise.trainchecker
 import android.util.Log
 import java.net.URLDecoder
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 data class MonitoringRoute(
@@ -11,10 +12,11 @@ data class MonitoringRoute(
     var name: String = "",
     val telegramToken: String,
     val chatId: String,
-    val buttonThreshold: Int = 2,
+    val buttonThreshold: Int = 1,
     val checkIntervalSec: Long = 15,
     val healthIntervalMin: Long = 30,
     var isActive: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis(),
     val logs: MutableList<String> = mutableListOf()
 ) {
     fun extractNameFromUrl(): String {
@@ -34,6 +36,16 @@ data class MonitoringRoute(
             Log.e("MonitoringRoute", "Error parsing URL: ${e.message}")
             "Маршрут $id"
         }
+    }
+
+    fun getCreationDateFormatted(): String {
+        val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+        return sdf.format(Date(createdAt))
+    }
+
+    // Форматирование интервалов
+    fun getIntervalsFormatted(): String {
+        return "Проверка: ${checkIntervalSec} сек\nHealthcheck: ${healthIntervalMin} мин"
     }
 
     private fun extractParam(url: String, paramName: String): String? {

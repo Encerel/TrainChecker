@@ -18,6 +18,7 @@ class RouteDetailsActivity : AppCompatActivity() {
     private lateinit var binding: ActivityRouteDetailsBinding
     private lateinit var route: MonitoringRoute
     private val logReceiver = object : BroadcastReceiver() {
+        @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
         override fun onReceive(context: Context?, intent: Intent?) {
             val routeId = intent?.getLongExtra("route_id", -1) ?: return
             if (routeId == route.id) {
@@ -46,6 +47,14 @@ class RouteDetailsActivity : AppCompatActivity() {
     private fun setupUI() {
         binding.routeName.text = route.name
         binding.routeUrl.text = route.url
+
+        binding.routeParameters.text = """
+        Минимум кнопок: ${route.buttonThreshold}
+        Интервал проверки: ${route.checkIntervalSec} сек
+        Интервал healthcheck: ${route.healthIntervalMin} мин
+    """.trimIndent()
+
+        binding.routeCreationDate.text = "Создан: ${route.getCreationDateFormatted()}"
 
         binding.buttonStart.setOnClickListener {
             startMonitoring(route.id)
