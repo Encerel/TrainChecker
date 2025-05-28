@@ -52,6 +52,7 @@ class RouteDetailsActivity : AppCompatActivity() {
         Минимум кнопок: ${route.buttonThreshold}
         Интервал проверки: ${route.checkIntervalSec} сек
         Интервал healthcheck: ${route.healthIntervalMin} мин
+        Telegram chatId: ${route.chatId}
     """.trimIndent()
 
         binding.routeCreationDate.text = "Создан: ${route.getCreationDateFormatted()}"
