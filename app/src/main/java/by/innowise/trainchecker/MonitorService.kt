@@ -53,6 +53,11 @@ class MonitorService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
@@ -134,8 +139,16 @@ class MonitorService : Service() {
                         lastHeartbeatTime = now
                     }
                 } catch (e: Exception) {
-                    sendLog(routeId, "Ошибка: ${e.message}")
-                    sendTelegramMessage(route, "⚠ Ошибка при проверке маршрута ${route.name}: ${e.message}")
+                    val errorMessage = e.message ?: ""
+                    sendLog(routeId, "Ошибка: $errorMessage")
+                    
+                    val shouldNotify = !errorMessage.contains("timeout", ignoreCase = true) &&
+                                      !errorMessage.contains("StandaloneCoroutine", ignoreCase = true) &&
+                                      !errorMessage.contains("SocketTimeoutException", ignoreCase = true)
+                    
+                    if (shouldNotify) {
+                        sendTelegramMessage(route, "⚠ Ошибка при проверке маршрута ${route.name}: $errorMessage")
+                    }
                 }
                 delay(route.checkIntervalSec * 1000)
 

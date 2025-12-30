@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="@dimen/spacing_medium">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Управление Chat ID"
+        android:textSize="@dimen/text_size_large"
+        android:textStyle="bold"
+        android:textColor="@color/text_primary"
+        android:layout_marginBottom="@dimen/spacing_medium" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Нажмите на Chat ID, чтобы удалить его из истории"
+        android:textSize="@dimen/text_size_small"
+        android:textColor="@color/text_secondary"
+        android:layout_marginBottom="@dimen/spacing_small" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/chatIdRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxHeight="300dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/buttonClose"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="@dimen/spacing_medium"
+        android:text="Закрыть"
+        android:textAllCaps="false"
+        app:cornerRadius="@dimen/button_corner_radius" />
+</LinearLayout>

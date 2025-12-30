@@ -41,10 +41,17 @@ class MonitoringRoutesAdapter(
                 routeDate.text = ""
             }
 
-            routeName.text = route.name
-            routeStatus.text = if (route.isActive) "Активен" else "Не активен"
+            if (route.isActive) {
+                routeStatus.text = "● Активен"
+                routeStatus.setTextColor(root.context.getColor(R.color.success))
+                routeStatus.setBackgroundResource(R.drawable.bg_status_active)
+            } else {
+                routeStatus.text = "○ Не активен"
+                routeStatus.setTextColor(root.context.getColor(R.color.inactive_status))
+                routeStatus.setBackgroundResource(R.drawable.bg_status_inactive)
+            }
 
-            routeCreationDate.text = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+            routeCreationDate.text = "Создан: " + SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
                 .format(Date(route.createdAt))
 
             buttonStart.isEnabled = !route.isActive

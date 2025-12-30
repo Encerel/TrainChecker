@@ -61,8 +61,10 @@ data class MonitoringRoute(
                 // Форматируем дату для красивого отображения
                 val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                 val date = inputFormat.parse(it)
-                val outputFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
-                outputFormat.format(date)
+                date?.let {
+                    val outputFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+                    outputFormat.format(it)
+                } ?: it
             } catch (e: Exception) {
                 it // возвращаем как есть, если не удалось распарсить
             }

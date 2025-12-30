@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -45,6 +46,9 @@ class MainActivity : AppCompatActivity() {
         setupRecyclerView()
         loadRoutes()
 
+        binding.buttonInstructions.setOnClickListener {
+            startActivity(Intent(this, InstructionsActivity::class.java))
+        }
         binding.buttonAdd.setOnClickListener {
             startActivity(Intent(this, CreateMonitoringActivity::class.java))
         }
@@ -61,6 +65,11 @@ class MainActivity : AppCompatActivity() {
                 stopMonitoring(route.id)
             }
             adapter.notifyDataSetChanged()
+        }
+
+        binding.buttonOpenWebsite.setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pass.rw.by/ru/"))
+            startActivity(intent)
         }
     }
 

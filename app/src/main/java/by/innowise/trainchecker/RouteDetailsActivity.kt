@@ -69,6 +69,10 @@ class RouteDetailsActivity : AppCompatActivity() {
             updateRouteStatus()
         }
 
+        binding.buttonEdit.setOnClickListener {
+            editRoute()
+        }
+
         binding.buttonDelete.setOnClickListener {
             deleteRoute()
         }
@@ -77,7 +81,15 @@ class RouteDetailsActivity : AppCompatActivity() {
     }
 
     private fun updateRouteStatus() {
-        binding.routeStatus.text = if (route.isActive) "Активен" else "Не активен"
+        if (route.isActive) {
+            binding.routeStatus.text = "● Активен"
+            binding.routeStatus.setTextColor(getColor(R.color.success))
+            binding.routeStatus.setBackgroundResource(R.drawable.bg_status_active)
+        } else {
+            binding.routeStatus.text = "○ Не активен"
+            binding.routeStatus.setTextColor(getColor(R.color.inactive_status))
+            binding.routeStatus.setBackgroundResource(R.drawable.bg_status_inactive)
+        }
         binding.buttonStart.isEnabled = !route.isActive
         binding.buttonStop.isEnabled = route.isActive
     }
@@ -88,11 +100,8 @@ class RouteDetailsActivity : AppCompatActivity() {
 
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     private fun appendLog(message: String) {
-        val time = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME)
-        val logEntry = "$time: $message"
-
         runOnUiThread {
-            route.logs.add(0, logEntry) // Добавляем в начало списка
+            route.logs.add(0, message) // Добавляем в начало списка
             if (route.logs.size > 100) {
                 route.logs.removeLast() // Ограничиваем количество логов
             }
@@ -122,6 +131,13 @@ class RouteDetailsActivity : AppCompatActivity() {
         startService(intent)
     }
 
+    private fun editRoute() {
+        val intent = Intent(this, CreateMonitoringActivity::class.java).apply {
+            putExtra("route_id", route.id)
+        }
+        startActivity(intent)
+    }
+
     private fun deleteRoute() {
         stopMonitoring(route.id)
 
@@ -130,6 +146,16 @@ class RouteDetailsActivity : AppCompatActivity() {
         MonitoringPreferenceManager.saveRoutes(this, routes)
 
         finish()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val routes = MonitoringPreferenceManager.getRoutes(this)
+        routes.find { it.id == route.id }?.let {
+            route = it
+            setupUI()
+            loadLogs()
+        }
     }
 
     override fun onStart() {
