@@ -112,20 +112,91 @@ class MonitorService : Service() {
                     val html = response.body?.string() ?: ""
 
                     val doc = Jsoup.parse(html)
-                    val forms = doc.select("form.js-sch-item-form")
-                    val buttonCount = forms.count { form ->
-                        form.selectFirst("a.btn.btn-index:contains(Выбрать места)") != null
+                    // Ищем строки поездов по div.sch-table__row-wrap (содержит и номер поезда, и кнопку)
+                    val trainRows = doc.select("div.sch-table__row-wrap")
+                    
+                    // Находим конкретные поезда с доступными местами
+                    // Если список trainNumbers не пуст, мы будем учитывать ТОЛЬКО эти поезда для подсчета
+                    val matchingAvailableTrains = mutableListOf<String>()
+                    
+                    val allRowsWithButtons = trainRows.filter { row ->
+                        row.selectFirst("a.btn.btn-index:contains(Выбрать места)") != null ||
+                        row.selectFirst("a.btn.btn-index:contains(ВЫБРАТЬ МЕСТА)") != null
+                    }
+                    
+                    if (route.trainNumbers.isNotEmpty()) {
+                        // Если указаны конкретные поезда - фильтруем
+                        allRowsWithButtons.forEach { row ->
+                            val trainNumber = row.attr("data-train-number").trim().ifEmpty {
+                                row.selectFirst("span.train-number")?.text()?.trim()
+                            }
+                            
+                            if (!trainNumber.isNullOrEmpty()) {
+                                val normalizedFound = trainNumber.replace("\\s+".toRegex(), "").uppercase()
+                                val matchedTrain = route.trainNumbers.find { target ->
+                                    normalizedFound == target.replace("\\s+".toRegex(), "").uppercase()
+                                }
+                                if (matchedTrain != null) {
+                                    matchingAvailableTrains.add(trainNumber)
+                                }
+                            }
+                        }
+                    } else {
+                        // Если поезда не указаны - считаем все доступные (старое поведение)
+                        allRowsWithButtons.forEach { row ->
+                            val trainNumber = row.attr("data-train-number").trim().ifEmpty {
+                                row.selectFirst("span.train-number")?.text()?.trim()
+                            }
+                            if (!trainNumber.isNullOrEmpty()) {
+                                matchingAvailableTrains.add(trainNumber)
+                            }
+                        }
                     }
 
-                    if (buttonCount >= route.buttonThreshold) {
+                    // Используем count именно подходящих поездов
+                    val relevantButtonCount = matchingAvailableTrains.size
+
+                    // Если указаны конкретные поезда, но ни один не найден — НЕ уведомляем,
+                    // даже если buttonThreshold == 0
+                    val shouldNotify = if (route.trainNumbers.isNotEmpty()) {
+                        matchingAvailableTrains.isNotEmpty() && relevantButtonCount >= route.buttonThreshold
+                    } else {
+                        relevantButtonCount >= maxOf(route.buttonThreshold, 1)
+                    }
+
+                    if (shouldNotify) {
                         if (!lastStatus) {
-                            val message = "✅ На маршруте ${route.name} найдено $buttonCount поездов со свободными местами!\nСсылка: ${route.url}"
+                            val trainsInfo = if (matchingAvailableTrains.isNotEmpty()) {
+                                "\nПоезда: ${matchingAvailableTrains.joinToString(", ")}"
+                            } else ""
+                            
+                            val message = "✅ На маршруте ${route.name} найдено $relevantButtonCount поездов со свободными местами!$trainsInfo\nСсылка: ${route.url}"
                             sendTelegramMessage(route, message)
-                            sendLog(routeId, "МЕСТА НАЙДЕНЫ. Количество кнопок: $buttonCount")
+                            
+                            val logMessage = "МЕСТА НАЙДЕНЫ. Подходящих поездов: $relevantButtonCount. Поезда: ${matchingAvailableTrains.joinToString(", ")}"
+                            sendLog(routeId, logMessage)
+                            
+                            // Автопокупка если включена
+                            if (route.autoPurchaseEnabled && route.trainNumber.isNotEmpty()) {
+                                sendLog(routeId, "Запуск автопокупки для поезда ${route.trainNumber}...")
+                                attemptAutoPurchase(route)
+                            }
                         }
                         lastStatus = true
                     } else {
-                        sendLog(routeId, "Места НЕ найдены. Количество кнопок: $buttonCount")
+                        // Логируем, почему не сработало
+                        if (route.trainNumbers.isNotEmpty() && allRowsWithButtons.isNotEmpty()) {
+                            val foundTrains = allRowsWithButtons.mapNotNull { row ->
+                                row.attr("data-train-number").trim().ifEmpty {
+                                    row.selectFirst("span.train-number")?.text()?.trim()
+                                }
+                            }.filter { it.isNotEmpty() }
+                            val foundTrainsStr = if (foundTrains.isNotEmpty()) " Найдены места для: ${foundTrains.joinToString(", ")}" else ""
+                            sendLog(routeId, "Места есть (${allRowsWithButtons.size} шт), но не для поездов: ${route.trainNumbersFormatted}.$foundTrainsStr")
+                        } else {
+                            sendLog(routeId, "Места НЕ найдены (подходящих: $relevantButtonCount)")
+                        }
+                        
                         if (lastStatus) {
                             sendTelegramMessage(route, "❌ На маршруте ${route.name} места закончились")
                         }
@@ -177,6 +248,35 @@ class MonitorService : Service() {
         getSharedPreferences("monitor_service", Context.MODE_PRIVATE).edit()
             .remove("active_routes")
             .apply()
+    }
+
+    private fun attemptAutoPurchase(route: MonitoringRoute) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                sendLog(route.id, "Автопокупка: начало процесса...")
+                
+                val automation = TicketPurchaseAutomation(route)
+                val result = automation.attemptPurchase()
+                
+                when (result) {
+                    is TicketPurchaseAutomation.PurchaseResult.Success -> {
+                        sendTelegramMessage(route, "🎉 АВТОПОКУПКА УСПЕШНА!\n${result.message}\n\nМаршрут: ${route.name}\nПоезд: ${route.trainNumber}\n\nПроверьте корзину на pass.rw.by для оплаты!")
+                        sendLog(route.id, "Автопокупка УСПЕШНА: ${result.message}")
+                    }
+                    is TicketPurchaseAutomation.PurchaseResult.Error -> {
+                        sendTelegramMessage(route, "⚠️ Автопокупка не удалась\nШаг: ${result.step}\nОшибка: ${result.message}\n\nПопробуйте купить билет вручную: ${route.url}")
+                        sendLog(route.id, "Автопокупка ОШИБКА на шаге ${result.step}: ${result.message}")
+                    }
+                    is TicketPurchaseAutomation.PurchaseResult.NeedsLogin -> {
+                        sendLog(route.id, "Автопокупка: требуется авторизация, повторная попытка...")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MonitorService", "Auto purchase error", e)
+                sendTelegramMessage(route, "⚠️ Ошибка автопокупки: ${e.message}\n\nКупите билет вручную: ${route.url}")
+                sendLog(route.id, "Автопокупка ИСКЛЮЧЕНИЕ: ${e.message}")
+            }
+        }
     }
 
     private fun sendTelegramMessage(route: MonitoringRoute, message: String) {

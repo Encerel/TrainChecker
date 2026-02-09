@@ -79,4 +79,37 @@ object MonitoringPreferenceManager {
             .putStringSet(CHAT_ID_HISTORY_KEY, updatedHistory)
             .apply()
     }
+
+    private const val PASSENGER_DATA_KEY = "default_passenger_data"
+    private const val RW_LOGIN_KEY = "default_rw_login"
+
+    fun saveDefaultPassengerData(context: Context, data: AutoPurchaseData) {
+        val json = gson.toJson(data)
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PASSENGER_DATA_KEY, json)
+            .apply()
+    }
+
+    fun getDefaultPassengerData(context: Context): AutoPurchaseData? {
+        val json = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .getString(PASSENGER_DATA_KEY, null) ?: return null
+        return try {
+            gson.fromJson(json, AutoPurchaseData::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun saveDefaultRwLogin(context: Context, login: String) {
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(RW_LOGIN_KEY, login)
+            .apply()
+    }
+
+    fun getDefaultRwLogin(context: Context): String? {
+        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .getString(RW_LOGIN_KEY, null)
+    }
 }

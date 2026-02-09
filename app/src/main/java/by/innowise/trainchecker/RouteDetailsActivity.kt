@@ -48,11 +48,17 @@ class RouteDetailsActivity : AppCompatActivity() {
         binding.routeName.text = route.name
         binding.routeUrl.text = route.url
 
+        val autoPurchaseInfo = if (route.autoPurchaseEnabled) {
+            "\n🛒 Автопокупка: ВКЛ (поезд ${route.trainNumber})"
+        } else {
+            "\n🛒 Автопокупка: ВЫКЛ"
+        }
+
         binding.routeParameters.text = """
         Минимум кнопок: ${route.buttonThreshold}
         Интервал проверки: ${route.checkIntervalSec} сек
         Интервал healthcheck: ${route.healthIntervalMin} мин
-        Telegram chatId: ${route.chatId}
+        Telegram chatId: ${route.chatId}$autoPurchaseInfo
     """.trimIndent()
 
         binding.routeCreationDate.text = "Создан: ${route.getCreationDateFormatted()}"

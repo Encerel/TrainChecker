@@ -17,8 +17,45 @@ data class MonitoringRoute(
     val healthIntervalMin: Long = 30,
     var isActive: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val logs: MutableList<String> = mutableListOf()
+    val logs: MutableList<String> = mutableListOf(),
+    // Поля для автопокупки (опциональные)
+    val autoPurchaseEnabled: Boolean = false,
+    val trainNumbers: List<String> = emptyList(),
+    val rwLogin: String = "",
+    val rwPassword: String = "",
+    // Данные пассажира
+    val passengerLastName: String = "",
+    val passengerFirstName: String = "",
+    val passengerMiddleName: String = "",
+    val passengerDocumentNumber: String = ""
 ) {
+    companion object {
+        /**
+         * Парсит строку с номерами поездов, разделенными различными разделителями
+         * Поддерживаемые разделители: запятая, точка с запятой, точка, пробел
+         * @param input строка с номерами поездов (например: "872Б, 860Б, 658Б")
+         * @return список номеров поездов
+         */
+        fun parseTrainNumbers(input: String): List<String> {
+            return input.split(Regex("[,;.\\s]+"))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+        }
+    }
+    
+    /**
+     * Форматированная строка с номерами поездов для отображения
+     */
+    val trainNumbersFormatted: String
+        get() = trainNumbers.joinToString(", ")
+    
+    /**
+     * Обратная совместимость: возвращает первый номер поезда или пустую строку
+     * Используется в автопокупке (которая пока не обновлена)
+     */
+    val trainNumber: String
+        get() = trainNumbers.firstOrNull() ?: ""
+
     fun extractNameFromUrl(): String {
         return try {
             val decodedUrl = URLDecoder.decode(url, "UTF-8")
