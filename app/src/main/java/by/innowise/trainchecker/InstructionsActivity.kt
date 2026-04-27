@@ -23,12 +23,6 @@ class InstructionsActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        binding.instructionImage2.setOnClickListener {
-            val intent = Intent(this, ImageViewerActivity::class.java).apply {
-                putExtra("image_res_id", R.drawable.instruction_step4)
-            }
-            startActivity(intent)
-        }
     }
 
     override fun onSupportNavigateUp(): Boolean {

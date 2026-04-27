@@ -208,26 +208,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="@dimen/spacing_medium"
-                        android:hint="Минимум кнопок"
-                        app:boxBackgroundMode="outline"
-                        app:boxCornerRadiusTopStart="8dp"
-                        app:boxCornerRadiusTopEnd="8dp"
-                        app:boxCornerRadiusBottomStart="8dp"
-                        app:boxCornerRadiusBottomEnd="8dp"
-                        app:helperText="По умолчанию: 1"
-                        app:suffixText="шт">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/editButtonThreshold"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="number" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="@dimen/spacing_medium"
                         android:hint="Интервал проверки"
                         app:boxBackgroundMode="outline"
                         app:boxCornerRadiusTopStart="8dp"

@@ -112,21 +112,21 @@ class MonitorService : Service() {
                     val html = response.body?.string() ?: ""
 
                     val doc = Jsoup.parse(html)
-                    // Ищем строки поездов по div.sch-table__row-wrap (содержит и номер поезда, и кнопку)
+                    // Ищем строки поездов по div.sch-table__row-wrap (содержит номер поезда и действие выбора мест)
                     val trainRows = doc.select("div.sch-table__row-wrap")
                     
                     // Находим конкретные поезда с доступными местами
                     // Если список trainNumbers не пуст, мы будем учитывать ТОЛЬКО эти поезда для подсчета
                     val matchingAvailableTrains = mutableListOf<String>()
                     
-                    val allRowsWithButtons = trainRows.filter { row ->
+                    val availableRows = trainRows.filter { row ->
                         row.selectFirst("a.btn.btn-index:contains(Выбрать места)") != null ||
                         row.selectFirst("a.btn.btn-index:contains(ВЫБРАТЬ МЕСТА)") != null
                     }
                     
                     if (route.trainNumbers.isNotEmpty()) {
                         // Если указаны конкретные поезда - фильтруем
-                        allRowsWithButtons.forEach { row ->
+                        availableRows.forEach { row ->
                             val trainNumber = row.attr("data-train-number").trim().ifEmpty {
                                 row.selectFirst("span.train-number")?.text()?.trim()
                             }
@@ -143,7 +143,7 @@ class MonitorService : Service() {
                         }
                     } else {
                         // Если поезда не указаны - считаем все доступные (старое поведение)
-                        allRowsWithButtons.forEach { row ->
+                        availableRows.forEach { row ->
                             val trainNumber = row.attr("data-train-number").trim().ifEmpty {
                                 row.selectFirst("span.train-number")?.text()?.trim()
                             }
@@ -153,16 +153,8 @@ class MonitorService : Service() {
                         }
                     }
 
-                    // Используем count именно подходящих поездов
-                    val relevantButtonCount = matchingAvailableTrains.size
-
-                    // Если указаны конкретные поезда, но ни один не найден — НЕ уведомляем,
-                    // даже если buttonThreshold == 0
-                    val shouldNotify = if (route.trainNumbers.isNotEmpty()) {
-                        matchingAvailableTrains.isNotEmpty() && relevantButtonCount >= route.buttonThreshold
-                    } else {
-                        relevantButtonCount >= maxOf(route.buttonThreshold, 1)
-                    }
+                    val availableTrainCount = matchingAvailableTrains.size
+                    val shouldNotify = matchingAvailableTrains.isNotEmpty()
 
                     if (shouldNotify) {
                         if (!lastStatus) {
@@ -170,10 +162,10 @@ class MonitorService : Service() {
                                 "\nПоезда: ${matchingAvailableTrains.joinToString(", ")}"
                             } else ""
                             
-                            val message = "✅ На маршруте ${route.name} найдено $relevantButtonCount поездов со свободными местами!$trainsInfo\nСсылка: ${route.url}"
+                            val message = "✅ На маршруте ${route.name} найдено $availableTrainCount поездов со свободными местами!$trainsInfo\nСсылка: ${route.url}"
                             sendTelegramMessage(route, message)
                             
-                            val logMessage = "МЕСТА НАЙДЕНЫ. Подходящих поездов: $relevantButtonCount. Поезда: ${matchingAvailableTrains.joinToString(", ")}"
+                            val logMessage = "МЕСТА НАЙДЕНЫ. Подходящих поездов: $availableTrainCount. Поезда: ${matchingAvailableTrains.joinToString(", ")}"
                             sendLog(routeId, logMessage)
                             
                             // Автопокупка если включена
@@ -185,16 +177,16 @@ class MonitorService : Service() {
                         lastStatus = true
                     } else {
                         // Логируем, почему не сработало
-                        if (route.trainNumbers.isNotEmpty() && allRowsWithButtons.isNotEmpty()) {
-                            val foundTrains = allRowsWithButtons.mapNotNull { row ->
+                        if (route.trainNumbers.isNotEmpty() && availableRows.isNotEmpty()) {
+                            val foundTrains = availableRows.mapNotNull { row ->
                                 row.attr("data-train-number").trim().ifEmpty {
                                     row.selectFirst("span.train-number")?.text()?.trim()
                                 }
                             }.filter { it.isNotEmpty() }
                             val foundTrainsStr = if (foundTrains.isNotEmpty()) " Найдены места для: ${foundTrains.joinToString(", ")}" else ""
-                            sendLog(routeId, "Места есть (${allRowsWithButtons.size} шт), но не для поездов: ${route.trainNumbersFormatted}.$foundTrainsStr")
+                            sendLog(routeId, "Места есть (${availableRows.size} шт), но не для поездов: ${route.trainNumbersFormatted}.$foundTrainsStr")
                         } else {
-                            sendLog(routeId, "Места НЕ найдены (подходящих: $relevantButtonCount)")
+                            sendLog(routeId, "Места НЕ найдены (подходящих: $availableTrainCount)")
                         }
                         
                         if (lastStatus) {
@@ -207,19 +199,12 @@ class MonitorService : Service() {
                     val now = System.currentTimeMillis()
                     if (now - lastHeartbeatTime >= route.healthIntervalMin * 60 * 1000) {
                         sendTelegramMessage(route, "🟢 Мониторинг маршрута ${route.name} активен")
+                        sendLog(routeId, "Мониторинг маршрута ${route.name} активен")
                         lastHeartbeatTime = now
                     }
                 } catch (e: Exception) {
                     val errorMessage = e.message ?: ""
                     sendLog(routeId, "Ошибка: $errorMessage")
-                    
-                    val shouldNotify = !errorMessage.contains("timeout", ignoreCase = true) &&
-                                      !errorMessage.contains("StandaloneCoroutine", ignoreCase = true) &&
-                                      !errorMessage.contains("SocketTimeoutException", ignoreCase = true)
-                    
-                    if (shouldNotify) {
-                        sendTelegramMessage(route, "⚠ Ошибка при проверке маршрута ${route.name}: $errorMessage")
-                    }
                 }
                 delay(route.checkIntervalSec * 1000)
 
@@ -260,11 +245,9 @@ class MonitorService : Service() {
                 
                 when (result) {
                     is TicketPurchaseAutomation.PurchaseResult.Success -> {
-                        sendTelegramMessage(route, "🎉 АВТОПОКУПКА УСПЕШНА!\n${result.message}\n\nМаршрут: ${route.name}\nПоезд: ${route.trainNumber}\n\nПроверьте корзину на pass.rw.by для оплаты!")
                         sendLog(route.id, "Автопокупка УСПЕШНА: ${result.message}")
                     }
                     is TicketPurchaseAutomation.PurchaseResult.Error -> {
-                        sendTelegramMessage(route, "⚠️ Автопокупка не удалась\nШаг: ${result.step}\nОшибка: ${result.message}\n\nПопробуйте купить билет вручную: ${route.url}")
                         sendLog(route.id, "Автопокупка ОШИБКА на шаге ${result.step}: ${result.message}")
                     }
                     is TicketPurchaseAutomation.PurchaseResult.NeedsLogin -> {
@@ -273,7 +256,6 @@ class MonitorService : Service() {
                 }
             } catch (e: Exception) {
                 Log.e("MonitorService", "Auto purchase error", e)
-                sendTelegramMessage(route, "⚠️ Ошибка автопокупки: ${e.message}\n\nКупите билет вручную: ${route.url}")
                 sendLog(route.id, "Автопокупка ИСКЛЮЧЕНИЕ: ${e.message}")
             }
         }

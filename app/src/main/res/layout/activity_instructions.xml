@@ -41,20 +41,6 @@
             android:background="?attr/selectableItemBackground"
             android:contentDescription="Пример страницы поиска билетов. Нажмите для увеличения"/>
 
-        <ImageView
-            android:id="@+id/instructionImage2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="16dp"
-            android:adjustViewBounds="true"
-            android:scaleType="fitCenter"
-            android:src="@drawable/instruction_step4"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground"
-            android:contentDescription="Пример настройки количества кнопок. Нажмите для увеличения"/>
-
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

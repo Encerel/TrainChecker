@@ -55,7 +55,6 @@ class RouteDetailsActivity : AppCompatActivity() {
         }
 
         binding.routeParameters.text = """
-        Минимум кнопок: ${route.buttonThreshold}
         Интервал проверки: ${route.checkIntervalSec} сек
         Интервал healthcheck: ${route.healthIntervalMin} мин
         Telegram chatId: ${route.chatId}$autoPurchaseInfo

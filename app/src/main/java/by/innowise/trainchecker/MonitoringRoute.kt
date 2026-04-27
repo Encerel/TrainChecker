@@ -12,7 +12,6 @@ data class MonitoringRoute(
     var name: String = "",
     val telegramToken: String,
     val chatId: String,
-    val buttonThreshold: Int = 1,
     val checkIntervalSec: Long = 15,
     val healthIntervalMin: Long = 30,
     var isActive: Boolean = false,

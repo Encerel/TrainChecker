@@ -51,14 +51,13 @@ class CreateMonitoringActivity : AppCompatActivity() {
 
             val token = binding.editToken.text.toString()
             val chatId = binding.editChatId.text.toString()
-            val buttonThreshold = (binding.editButtonThreshold.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1)
             val checkInterval = binding.editCheckInterval.text.toString().toLongOrNull() ?: 15L
             val healthInterval = binding.editHealthInterval.text.toString().toLongOrNull() ?: 30L
 
             if (isEditMode) {
-                updateRoute(url, token, chatId, buttonThreshold, checkInterval, healthInterval)
+                updateRoute(url, token, chatId, checkInterval, healthInterval)
             } else {
-                createRoute(url, token, chatId, buttonThreshold, checkInterval, healthInterval)
+                createRoute(url, token, chatId, checkInterval, healthInterval)
             }
         }
     }
@@ -92,7 +91,6 @@ class CreateMonitoringActivity : AppCompatActivity() {
         binding.editUrl.setText(route.url)
         binding.editToken.setText(route.telegramToken)
         binding.editChatId.setText(route.chatId)
-        binding.editButtonThreshold.setText(route.buttonThreshold.toString())
         binding.editCheckInterval.setText(route.checkIntervalSec.toString())
         binding.editHealthInterval.setText(route.healthIntervalMin.toString())
         binding.editTrainNumber.setText(route.trainNumbersFormatted)
@@ -209,7 +207,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
     }
 
     private fun createRoute(url: String, token: String, chatId: String, 
-                           buttonThreshold: Int, checkInterval: Long, healthInterval: Long) {
+                           checkInterval: Long, healthInterval: Long) {
         val autoPurchaseData = getAutoPurchaseData()
         if (!validateAutoPurchaseData(autoPurchaseData)) return
 
@@ -223,7 +221,6 @@ class CreateMonitoringActivity : AppCompatActivity() {
             url = url,
             telegramToken = token,
             chatId = chatId,
-            buttonThreshold = buttonThreshold,
             checkIntervalSec = checkInterval,
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
@@ -261,7 +258,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
     }
 
     private fun updateRoute(url: String, token: String, chatId: String,
-                           buttonThreshold: Int, checkInterval: Long, healthInterval: Long) {
+                           checkInterval: Long, healthInterval: Long) {
         val routes = MonitoringPreferenceManager.getRoutes(this).toMutableList()
         val routeIndex = routes.indexOfFirst { it.id == editingRouteId }
         
@@ -292,7 +289,6 @@ class CreateMonitoringActivity : AppCompatActivity() {
             url = url,
             telegramToken = token,
             chatId = chatId,
-            buttonThreshold = buttonThreshold,
             checkIntervalSec = checkInterval,
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
