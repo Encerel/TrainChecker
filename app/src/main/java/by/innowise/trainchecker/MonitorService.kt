@@ -246,6 +246,10 @@ class MonitorService : Service() {
                 when (result) {
                     is TicketPurchaseAutomation.PurchaseResult.Success -> {
                         sendLog(route.id, "Автопокупка УСПЕШНА: ${result.message}")
+                        sendTelegramMessage(
+                            route,
+                            "🎉 Заказ по маршруту ${route.name} успешно зарезервирован.\n${result.message}\nПроверьте корзину заказов на pass.rw.by."
+                        )
                     }
                     is TicketPurchaseAutomation.PurchaseResult.Error -> {
                         sendLog(route.id, "Автопокупка ОШИБКА на шаге ${result.step}: ${result.message}")

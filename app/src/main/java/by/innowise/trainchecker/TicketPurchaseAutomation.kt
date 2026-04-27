@@ -1,7 +1,12 @@
 package by.innowise.trainchecker
 
 import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.Jsoup
@@ -17,6 +22,7 @@ class TicketPurchaseAutomation(
     companion object {
         private const val TAG = "TicketPurchase"
         private const val BASE_URL = "https://pass.rw.by"
+        private const val TARGET_SERVICE_CLASS = "2П"
         
         private fun ensureHttps(url: String): String {
             return if (url.startsWith("http://")) {
@@ -59,6 +65,8 @@ class TicketPurchaseAutomation(
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+
+    private val gson = Gson()
 
     sealed class PurchaseResult {
         data class Success(val message: String) : PurchaseResult()
@@ -125,12 +133,12 @@ class TicketPurchaseAutomation(
             val carriageResult = selectCarriage2P(placesDoc)
             if (carriageResult is PurchaseResult.Error) return carriageResult
 
-            val carriageDoc = (carriageResult as? CarriageSelected)?.document
+            val carriageSelection = carriageResult as? CarriageSelected
                 ?: return PurchaseResult.Error("Не удалось выбрать вагон (2П)", "select_carriage")
 
             // Нажимаем "Ввести данные пассажиров"
             // Теперь мы авторизованы, поэтому должна открыться форма пассажира
-            val passengerFormResult = submitEnterPassengerData(carriageDoc)
+            val passengerFormResult = submitEnterPassengerData(carriageSelection)
             if (passengerFormResult is PurchaseResult.Error) return passengerFormResult
             
             // Если вдруг снова вернулся NeedsLogin - что-то пошло не так
@@ -555,7 +563,12 @@ class TicketPurchaseAutomation(
     private data class RoutePageLoaded(val document: Document) : InternalResult()
     private data class TrainFormFound(val formData: FormData) : InternalResult()
     private data class PlacesPageLoaded(val document: Document) : InternalResult()
-    private data class CarriageSelected(val document: Document) : InternalResult()
+    private data class CarriageSelected(
+        val document: Document,
+        val passengerFormFields: Map<String, String>,
+        val carNumber: String,
+        val serviceClass: String
+    ) : InternalResult()
     private data class PassengerFormLoaded(val document: Document) : InternalResult()
     private data class PassengerDataFilled(val document: Document) : InternalResult()
 
@@ -564,6 +577,24 @@ class TicketPurchaseAutomation(
         val routeValue: String,
         val urlValue: String,
         val allInputs: Map<String, String> = emptyMap()
+    )
+
+    private data class PlaceChoiceConfig(
+        val from: String,
+        val to: String,
+        val date: String,
+        val time: String,
+        val fromTimeUnix: String,
+        val trainNumber: String,
+        val apiKey: String,
+        val applyModificator: String = ""
+    )
+
+    private data class SelectedCarriage(
+        val carType: String,
+        val carPlacesJson: String,
+        val tariff: JsonObject,
+        val car: JsonObject
     )
 
     private fun loadRoutePage(): Any {
@@ -587,7 +618,7 @@ class TicketPurchaseAutomation(
         } ?: return PurchaseResult.Error("Пустой ответ", "load_route")
         
         Log.d(TAG, "Route page loaded, length: ${html.length}")
-        return RoutePageLoaded(Jsoup.parse(html))
+        return RoutePageLoaded(Jsoup.parse(html, safeUrl))
     }
 
     private fun findTrainForm(doc: Document): Any {
@@ -726,7 +757,7 @@ class TicketPurchaseAutomation(
         Log.d(TAG, "Places page loaded, length: ${html.length}")
         
         // Сохраняем HTML для диагностики
-        val doc = Jsoup.parse(html)
+        val doc = Jsoup.parse(html, responseUrl)
         Log.d(TAG, "Page title: ${doc.title()}")
         
         // Проверяем, что мы действительно на странице выбора мест
@@ -739,66 +770,360 @@ class TicketPurchaseAutomation(
     }
 
     private fun selectCarriage2P(doc: Document): Any {
-        Log.d(TAG, "=== Checking carriage selection page ===")
-        Log.d(TAG, "Page title: ${doc.title()}")
-        
-        // Проверяем, что мы на странице выбора мест
-        val pageUrl = doc.location()
-        if (pageUrl.isNotEmpty()) {
-            Log.d(TAG, "Current page URL: $pageUrl")
+        Log.d(TAG, "=== Selecting carriage with service class $TARGET_SERVICE_CLASS ===")
+
+        val config = extractPlaceChoiceConfig(doc)
+            ?: return PurchaseResult.Error(
+                "Не удалось прочитать параметры страницы выбора мест",
+                "places_config"
+            )
+
+        val carTypes = doc.select("a.pl-type__item[data-car-type]")
+            .mapNotNull { it.attr("data-car-type").takeIf { value -> value.isNotBlank() } }
+            .distinct()
+
+        if (carTypes.isEmpty()) {
+            return PurchaseResult.Error("Не найдены доступные типы вагонов", "car_types")
         }
-        
-        // Проверяем наличие ключевых слов страницы выбора мест
-        val pageText = doc.text()
-        val isPlacesPage = pageUrl.contains("/order/places") || 
-                          pageUrl.contains("/ru/route/") ||
-                          pageText.contains("Выбрать места", ignoreCase = true) ||
-                          pageText.contains("Вагон", ignoreCase = true)
-        
-        if (!isPlacesPage) {
-            Log.d(TAG, "⚠ Warning: Might not be on places selection page")
-            Log.d(TAG, "Page text preview: ${pageText.take(200)}")
+
+        Log.d(TAG, "Available car type ids: ${carTypes.joinToString(", ")}")
+
+        val checkedServiceClasses = mutableSetOf<String>()
+
+        for (carType in carTypes) {
+            val carPlacesResult = loadCarPlaces(config, carType)
+            if (carPlacesResult is PurchaseResult.Error) return carPlacesResult
+
+            val carPlacesJson = (carPlacesResult as LoadedCarPlaces).json
+            val selected = findServiceClassCarriage(carType, carPlacesJson, checkedServiceClasses)
+            if (selected == null) continue
+
+            val carNumber = selected.car.getStringOrEmpty("number")
+            Log.d(TAG, "✓ Selected carriage #$carNumber (${selected.tariff.getStringOrEmpty("typeAbbr")})")
+
+            val carDetailsResult = loadCarDetails(config, selected)
+            if (carDetailsResult is PurchaseResult.Error) return carDetailsResult
+
+            val carDetailsJson = (carDetailsResult as LoadedCarDetails).json
+            val formFields = buildPassengerTransitionFields(selected, carDetailsJson)
+
+            return CarriageSelected(
+                document = doc,
+                passengerFormFields = formFields,
+                carNumber = carNumber,
+                serviceClass = selected.tariff.getStringOrEmpty("typeAbbr")
+            )
         }
-        
-        // Логируем что нашли на странице (для диагностики)
-        val has2P = pageText.contains("2П", ignoreCase = true)
-        val hasVagon = pageText.contains("Вагон", ignoreCase = true)
-        val hasSidyachiy = pageText.contains("Сидячий", ignoreCase = true)
-        
-        Log.d(TAG, "Page analysis:")
-        Log.d(TAG, "  - Contains '2П': $has2P")
-        Log.d(TAG, "  - Contains 'Вагон': $hasVagon")
-        Log.d(TAG, "  - Contains 'Сидячий': $hasSidyachiy")
-        
-        // Пытаемся найти конкретные вагоны для логирования
-        val vagonElements = doc.select("span, a, div").filter { 
-            it.text().contains("Вагон №", ignoreCase = true) 
-        }
-        
-        if (vagonElements.isNotEmpty()) {
-            Log.d(TAG, "Found ${vagonElements.size} carriage elements:")
-            vagonElements.take(5).forEach { element ->
-                Log.d(TAG, "  - ${element.text().trim().take(50)}")
-            }
-        } else {
-            Log.d(TAG, "No specific carriage elements found yet (might load dynamically)")
-        }
-        
-        // Для поездов "Региональные линии бизнес-класса" вагоны (2П) появляются
-        // после клика на "Выбрать места" в категории "Сидячий".
-        // Мы просто продолжаем процесс - следующий шаг найдет кнопку "Ввести данные пассажиров"
-        Log.d(TAG, "✓ Proceeding to passenger data entry")
-        return CarriageSelected(doc)
+
+        val foundClasses = checkedServiceClasses
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString(", ")
+            .ifBlank { "не определены" }
+
+        return PurchaseResult.Error(
+            "Вагон класса $TARGET_SERVICE_CLASS не найден. Найденные классы: $foundClasses",
+            "select_carriage"
+        )
     }
 
-    private fun submitEnterPassengerData(doc: Document): Any {
+    private data class LoadedCarPlaces(val json: JsonObject) : InternalResult()
+    private data class LoadedCarDetails(val json: JsonElement) : InternalResult()
+
+    private fun extractPlaceChoiceConfig(doc: Document): PlaceChoiceConfig? {
+        val html = doc.html()
+
+        fun stringValue(name: String): String? {
+            return Regex("$name\\s*:\\s*'([^']*)'")
+                .find(html)
+                ?.groupValues
+                ?.getOrNull(1)
+        }
+
+        fun numberValue(name: String): String? {
+            return Regex("$name\\s*:\\s*(\\d+)")
+                .find(html)
+                ?.groupValues
+                ?.getOrNull(1)
+        }
+
+        val apiKey = Regex("backend_sppd4_apikey\\s*=\\s*'([^']+)'")
+            .find(html)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?: return null
+
+        return PlaceChoiceConfig(
+            from = stringValue("from") ?: return null,
+            to = stringValue("to") ?: return null,
+            date = stringValue("date") ?: return null,
+            time = stringValue("time") ?: return null,
+            fromTimeUnix = numberValue("from_time_unix") ?: return null,
+            trainNumber = stringValue("train_number") ?: route.trainNumber,
+            apiKey = apiKey,
+            applyModificator = Regex("applyModificatorVal\\s*=\\s*'([^']*)'")
+                .find(html)
+                ?.groupValues
+                ?.getOrNull(1)
+                .orEmpty()
+        )
+    }
+
+    private fun loadCarPlaces(config: PlaceChoiceConfig, carType: String): Any {
+        val url = "$BASE_URL/ru/ajax/route/car_places/".toHttpUrl().newBuilder()
+            .addQueryParameter("from", config.from)
+            .addQueryParameter("to", config.to)
+            .addQueryParameter("date", config.date)
+            .addQueryParameter("train_number", config.trainNumber)
+            .addQueryParameter("car_type", carType)
+            .addQueryParameter("apply_modificator", config.applyModificator)
+            .addQueryParameter("from_time", config.fromTimeUnix)
+            .addQueryParameter("_", System.currentTimeMillis().toString())
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .header("Referer", "$BASE_URL/ru/order/places/")
+            .header("Accept", "application/json, text/javascript, */*; q=0.01")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .build()
+
+        val response = client.newCall(request).execute()
+        val body = response.body?.string()
+            ?: return PurchaseResult.Error("Пустой ответ списка вагонов", "car_places")
+
+        if (!response.isSuccessful) {
+            return PurchaseResult.Error("Ошибка загрузки вагонов: HTTP ${response.code}", "car_places")
+        }
+
+        return try {
+            val json = JsonParser.parseString(body).asJsonObject
+            LoadedCarPlaces(json)
+        } catch (e: Exception) {
+            Log.e(TAG, "Unable to parse car_places response", e)
+            PurchaseResult.Error("Не удалось разобрать список вагонов", "car_places_parse")
+        }
+    }
+
+    private fun findServiceClassCarriage(
+        carType: String,
+        carPlacesJson: JsonObject,
+        checkedServiceClasses: MutableSet<String>
+    ): SelectedCarriage? {
+        val tariffs = carPlacesJson.getAsJsonArrayOrNull("tariffs") ?: return null
+
+        tariffs.forEach { tariffElement ->
+            val tariff = tariffElement.asJsonObjectOrNull() ?: return@forEach
+            val typeAbbr = tariff.getStringOrEmpty("typeAbbr")
+            val typeText = tariff.getStringOrEmpty("type")
+            checkedServiceClasses.add(typeAbbr.ifBlank { typeText })
+
+            if (!matchesTargetServiceClass(typeAbbr, typeText)) {
+                return@forEach
+            }
+
+            val cars = tariff.getAsJsonArrayOrNull("cars") ?: return@forEach
+            val car = cars
+                .mapNotNull { it.asJsonObjectOrNull() }
+                .firstOrNull { it.isAvailableForOrder() }
+
+            if (car != null) {
+                return SelectedCarriage(
+                    carType = carType,
+                    carPlacesJson = gson.toJson(carPlacesJson),
+                    tariff = tariff,
+                    car = car
+                )
+            }
+        }
+
+        return null
+    }
+
+    private fun matchesTargetServiceClass(typeAbbr: String, typeText: String): Boolean {
+        val normalizedTarget = TARGET_SERVICE_CLASS.replace("\\s+".toRegex(), "").uppercase()
+        val normalizedAbbr = typeAbbr.replace("\\s+".toRegex(), "").uppercase()
+        val normalizedText = typeText.replace("\\s+".toRegex(), "").uppercase()
+        return normalizedAbbr == normalizedTarget || normalizedText.contains("($normalizedTarget)")
+    }
+
+    private fun loadCarDetails(config: PlaceChoiceConfig, selected: SelectedCarriage): Any {
+        val url = "$BASE_URL/ru/ajax/sppd4/v1/carriages/graphic/".toHttpUrl().newBuilder()
+            .addQueryParameter("user_key", config.apiKey)
+            .build()
+
+        val payload = buildCarDetailsPayload(config, selected)
+        val body = gson.toJson(payload).toRequestBody("application/json".toMediaType())
+
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .header("Referer", "$BASE_URL/ru/order/places/")
+            .header("Accept", "application/json, text/javascript, */*; q=0.01")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .post(body)
+            .build()
+
+        val response = client.newCall(request).execute()
+        val responseBody = response.body?.string()
+            ?: return PurchaseResult.Error("Пустой ответ схемы вагона", "car_details")
+
+        if (!response.isSuccessful) {
+            return PurchaseResult.Error("Ошибка загрузки схемы вагона: HTTP ${response.code}", "car_details")
+        }
+
+        return try {
+            val parsed = JsonParser.parseString(responseBody)
+            val first = parsed.asJsonArrayOrNull()?.firstOrNull()
+                ?: return PurchaseResult.Error("Схема вагона не найдена", "car_details_empty")
+            LoadedCarDetails(first)
+        } catch (e: Exception) {
+            Log.e(TAG, "Unable to parse carriage graphic response", e)
+            PurchaseResult.Error("Не удалось разобрать схему вагона", "car_details_parse")
+        }
+    }
+
+    private fun buildCarDetailsPayload(
+        config: PlaceChoiceConfig,
+        selected: SelectedCarriage
+    ): Map<String, Any> {
+        val car = selected.car
+        val tariff = selected.tariff
+        val emptyPlaces = car.getStringArray("emptyPlaces")
+        val price = tariff.getPriceNumber()
+        val typeCode = car.getStringOrEmpty("subType").takeLast(1).ifBlank {
+            selected.carType
+        }
+
+        val carriageInfo = mapOf(
+            "addSigns" to car.getStringOrEmpty("addSigns"),
+            "carrier" to car.getStringOrEmpty("carrier"),
+            "freeSeats" to emptyPlaces.joinToString(","),
+            "num" to car.getStringOrEmpty("number"),
+            "registrationAllowed" to (car.getBooleanOrNull("isElRegPossible")
+                ?: tariff.getBooleanOrFalse("isElRegPossible")),
+            "saleOnTwo" to car.getBooleanOrFalse("saleOnTwo"),
+            "serviceClassCode" to tariff.getStringOrEmpty("typeAbbr"),
+            "serviceClassIntCode" to tariff.getStringOrEmpty("typeAbbrInt"),
+            "subType" to car.getStringOrEmpty("subType"),
+            "tariff" to price,
+            "altTariff" to price,
+            "typeCode" to typeCode,
+            "typeCodeShow" to typeCode
+        )
+
+        return mapOf(
+            "depStationCode" to config.from,
+            "arrStationCode" to config.to,
+            "departureDate" to config.date,
+            "departureTime" to config.time,
+            "train" to config.trainNumber,
+            "countAdultPassengers" to 1,
+            "countChildrenPassengers" to 0,
+            "countFreePassengers" to 0,
+            "countSeats" to 1,
+            "orientation" to "H",
+            "width" to 960,
+            "carriageInfos" to listOf(carriageInfo)
+        )
+    }
+
+    private fun buildPassengerTransitionFields(
+        selected: SelectedCarriage,
+        carDetailsJson: JsonElement
+    ): Map<String, String> {
+        val car = selected.car
+        val tariff = selected.tariff
+        val emptyPlaces = car.getStringArray("emptyPlaces")
+        val seats = emptyPlaces
+            .mapNotNull { it.trimStart('0').ifBlank { "0" }.toIntOrNull() }
+            .sorted()
+
+        val firstSeat = seats.firstOrNull()?.toString().orEmpty()
+        val lastSeat = seats.lastOrNull()?.toString().orEmpty()
+        val detailsObject = carDetailsJson.asJsonObjectOrNull()
+
+        return linkedMapOf(
+            "places_adult" to "1",
+            "places_children" to "0",
+            "places_free" to "0",
+            "places_from" to firstSeat,
+            "places_to" to lastSeat,
+            "places_cost" to tariff.getStringOrEmpty("price_byn"),
+            "car_places" to selected.carPlacesJson,
+            "car_details" to gson.toJson(carDetailsJson),
+            "car_type" to selected.carType,
+            "car_number" to car.getStringOrEmpty("number"),
+            "is_gender_coupe" to (detailsObject?.getBooleanOrFalse("showGenderCoupeReq") ?: false).toString(),
+            "sale_on_two" to car.getBooleanOrFalse("saleOnTwo").toString(),
+            "type_abbr" to tariff.getStringOrEmpty("typeAbbr"),
+            "type_abbr_int" to tariff.getStringOrEmpty("typeAbbrInt"),
+            "is_el_reg_possible" to (car.getBooleanOrNull("isElRegPossible")
+                ?: tariff.getBooleanOrFalse("isElRegPossible")).toString(),
+            "uz" to tariff.getBooleanOrFalse("uz").toString(),
+            "sel_bedding" to tariff.getBooleanOrFalse("sel_bedding").toString()
+        )
+    }
+
+    private fun JsonElement.asJsonObjectOrNull(): JsonObject? {
+        return if (isJsonObject) asJsonObject else null
+    }
+
+    private fun JsonElement.asJsonArrayOrNull() = if (isJsonArray) asJsonArray else null
+
+    private fun JsonObject.getAsJsonArrayOrNull(name: String) = get(name)
+        ?.takeIf { it.isJsonArray }
+        ?.asJsonArray
+
+    private fun JsonObject.getStringOrEmpty(name: String): String {
+        val value = get(name) ?: return ""
+        return if (value.isJsonNull) "" else value.asString.orEmpty()
+    }
+
+    private fun JsonObject.getStringArray(name: String): List<String> {
+        return getAsJsonArrayOrNull(name)
+            ?.mapNotNull { item ->
+                if (item.isJsonNull) null else item.asString
+            }
+            ?: emptyList()
+    }
+
+    private fun JsonObject.getBooleanOrNull(name: String): Boolean? {
+        val value = get(name) ?: return null
+        return if (value.isJsonNull) null else value.asBoolean
+    }
+
+    private fun JsonObject.getBooleanOrFalse(name: String): Boolean {
+        return getBooleanOrNull(name) ?: false
+    }
+
+    private fun JsonObject.isAvailableForOrder(): Boolean {
+        val sellingAllowed = getBooleanOrNull("ticket_selling_allowed") ?: true
+        val emptyPlacesCount = getStringArray("emptyPlaces").size
+        val totalPlaces = get("totalPlaces")
+            ?.takeIf { !it.isJsonNull }
+            ?.asInt
+            ?: 0
+        return sellingAllowed && (emptyPlacesCount > 0 || totalPlaces > 0)
+    }
+
+    private fun JsonObject.getPriceNumber(): Double {
+        val rawPrice = getStringOrEmpty("price_byn")
+            .replace(" ", "")
+            .replace(",", ".")
+        return rawPrice.toDoubleOrNull() ?: 0.0
+    }
+
+    private fun submitEnterPassengerData(selection: CarriageSelected): Any {
+        val doc = selection.document
         Log.d(TAG, "=== Submitting passenger data form ===")
         
         // Сначала проверяем, может мы уже на странице с формой пассажира
         val hasPassengerForm = doc.selectFirst("form[action*='/order/passengers'], form[action*='passenger']") != null
         val hasPassengerFields = doc.selectFirst("input[name*='last_name'], input[name*='first_name'], input[name*='lastname'], input[name*='firstname']") != null
         
-        if (hasPassengerForm || hasPassengerFields) {
+        if (hasPassengerFields) {
             Log.d(TAG, "✓ Already on passenger form page, returning it directly")
             return PassengerFormLoaded(doc)
         }
@@ -848,7 +1173,7 @@ class TicketPurchaseAutomation(
             val form = doc.selectFirst("form[action*='/order/passengers'], form[action*='passenger']")
             if (form != null) {
                 Log.d(TAG, "✓ Found form directly: ${form.attr("action")}")
-                return submitFormToPassengers(form, doc)
+                return submitFormToPassengers(form, doc, selection.passengerFormFields)
             }
             
             // Логируем все кнопки и ссылки для диагностики
@@ -887,7 +1212,7 @@ class TicketPurchaseAutomation(
         val form = button.closest("form")
         if (form != null) {
             Log.d(TAG, "✓ Found form for button")
-            return submitFormToPassengers(form, doc)
+            return submitFormToPassengers(form, doc, selection.passengerFormFields)
         }
         
         // Если кнопка без href и без формы - возможно это JavaScript кнопка
@@ -897,7 +1222,11 @@ class TicketPurchaseAutomation(
         return PurchaseResult.Error("Не удалось определить действие для кнопки (возможно требуется JavaScript)", "passenger_button_action")
     }
     
-    private fun submitFormToPassengers(form: Element, doc: Document): Any {
+    private fun submitFormToPassengers(
+        form: Element,
+        doc: Document,
+        selectedFields: Map<String, String> = emptyMap()
+    ): Any {
         val action = form.attr("action")
         val rawUrl = if (action.startsWith("http")) action else "$BASE_URL$action"
         val url = ensureHttps(rawUrl)
@@ -908,10 +1237,15 @@ class TicketPurchaseAutomation(
         form.select("input[type=hidden]").forEach { input ->
             val name = input.attr("name")
             val value = input.attr("value")
-            if (name.isNotEmpty()) {
+            if (name.isNotEmpty() && !input.hasAttr("disabled") && !selectedFields.containsKey(name)) {
                 formBody.add(name, value)
                 Log.d(TAG, "  Form field: $name = ${value.take(30)}")
             }
+        }
+
+        selectedFields.forEach { (name, value) ->
+            formBody.add(name, value)
+            Log.d(TAG, "  Selected carriage field: $name = ${value.take(30)}")
         }
         
         val request = Request.Builder()
@@ -959,8 +1293,8 @@ class TicketPurchaseAutomation(
              // Проверяем, может быть это страница выбора мест, и нужно еще раз нажать кнопку
              val hasEnterDataButton = resultDoc.selectFirst("a:contains(ВВЕСТИ ДАННЫЕ), button:contains(ВВЕСТИ ДАННЫЕ), a:contains(Ввести данные пассажиров)") != null
              if (hasEnterDataButton) {
-                 Log.d(TAG, "⚠ Still on places page, button 'Enter passenger data' found. Trying to click it again...")
-                 return submitEnterPassengerData(resultDoc)
+                 Log.d(TAG, "⚠ Still on places page after passenger form submit")
+                 return PurchaseResult.Error("Форма пассажиров не открылась после выбора вагона", "passenger_form_retry")
              }
              
              // Мы залогинены, но формы нет
