@@ -1,6 +1,5 @@
 package by.innowise.trainchecker
 
-import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -168,9 +167,9 @@ class MonitorService : Service() {
                             val logMessage = "МЕСТА НАЙДЕНЫ. Подходящих поездов: $availableTrainCount. Поезда: ${matchingAvailableTrains.joinToString(", ")}"
                             sendLog(routeId, logMessage)
                             
-                            // Автопокупка если включена
+                            // Авторезерв если включен
                             if (route.autoPurchaseEnabled && route.trainNumber.isNotEmpty()) {
-                                sendLog(routeId, "Запуск автопокупки для поезда ${route.trainNumber}...")
+                                sendLog(routeId, "Запуск авторезерва для поезда ${route.trainNumber}...")
                                 attemptAutoPurchase(route)
                             }
                         }
@@ -238,29 +237,29 @@ class MonitorService : Service() {
     private fun attemptAutoPurchase(route: MonitoringRoute) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                sendLog(route.id, "Автопокупка: начало процесса...")
+                sendLog(route.id, "Авторезерв: начало процесса...")
                 
                 val automation = TicketPurchaseAutomation(route)
                 val result = automation.attemptPurchase()
                 
                 when (result) {
                     is TicketPurchaseAutomation.PurchaseResult.Success -> {
-                        sendLog(route.id, "Автопокупка УСПЕШНА: ${result.message}")
+                        sendLog(route.id, "Авторезерв УСПЕШЕН: ${result.message}")
                         sendTelegramMessage(
                             route,
                             "🎉 Заказ по маршруту ${route.name} успешно зарезервирован.\n${result.message}\nПроверьте корзину заказов на pass.rw.by."
                         )
                     }
                     is TicketPurchaseAutomation.PurchaseResult.Error -> {
-                        sendLog(route.id, "Автопокупка ОШИБКА на шаге ${result.step}: ${result.message}")
+                        sendLog(route.id, "Авторезерв ОШИБКА на шаге ${result.step}: ${result.message}")
                     }
                     is TicketPurchaseAutomation.PurchaseResult.NeedsLogin -> {
-                        sendLog(route.id, "Автопокупка: требуется авторизация, повторная попытка...")
+                        sendLog(route.id, "Авторезерв: требуется авторизация, повторная попытка...")
                     }
                 }
             } catch (e: Exception) {
                 Log.e("MonitorService", "Auto purchase error", e)
-                sendLog(route.id, "Автопокупка ИСКЛЮЧЕНИЕ: ${e.message}")
+                sendLog(route.id, "Авторезерв ИСКЛЮЧЕНИЕ: ${e.message}")
             }
         }
     }
@@ -311,7 +310,7 @@ class MonitorService : Service() {
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TrainChecker: ${activeMonitors.size} активных маршрутов")
-            .setSmallIcon(R.drawable.ic_notification_clear_all)
+            .setSmallIcon(R.drawable.ic_stat_train)
             .setContentIntent(createNotificationIntent())
             .setOngoing(true)
             .build()
@@ -341,7 +340,7 @@ class MonitorService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("TrainChecker")
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_menu_crop)
+            .setSmallIcon(R.drawable.ic_stat_train)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()

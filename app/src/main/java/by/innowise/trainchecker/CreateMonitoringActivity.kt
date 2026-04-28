@@ -70,10 +70,14 @@ class CreateMonitoringActivity : AppCompatActivity() {
 
     private fun loadDefaultPassengerData() {
         MonitoringPreferenceManager.getDefaultPassengerData(this)?.let { data ->
+            binding.editServiceClasses.setText(data.serviceClassesInput)
             binding.editPassengerLastName.setText(data.lastName)
             binding.editPassengerFirstName.setText(data.firstName)
             binding.editPassengerMiddleName.setText(data.middleName)
             binding.editPassengerDocument.setText(data.documentNumber)
+        } ?: binding.editServiceClasses.setText(MonitoringRoute.DEFAULT_SERVICE_CLASS)
+        if (binding.editServiceClasses.text.isNullOrBlank()) {
+            binding.editServiceClasses.setText(MonitoringRoute.DEFAULT_SERVICE_CLASS)
         }
         MonitoringPreferenceManager.getDefaultRwLogin(this)?.let {
             binding.editRwLogin.setText(it)
@@ -95,9 +99,10 @@ class CreateMonitoringActivity : AppCompatActivity() {
         binding.editHealthInterval.setText(route.healthIntervalMin.toString())
         binding.editTrainNumber.setText(route.trainNumbersFormatted)
 
-        // Загрузка данных автопокупки
+        // Загрузка данных авторезерва
         binding.switchAutoPurchase.isChecked = route.autoPurchaseEnabled
         binding.autoPurchaseFields.visibility = if (route.autoPurchaseEnabled) View.VISIBLE else View.GONE
+        binding.editServiceClasses.setText(route.serviceClassesFormatted)
         binding.editRwLogin.setText(route.rwLogin)
         binding.editRwPassword.setText(route.rwPassword)
         binding.editPassengerLastName.setText(route.passengerLastName)
@@ -175,6 +180,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         return AutoPurchaseData(
             enabled = binding.switchAutoPurchase.isChecked,
             trainNumber = binding.editTrainNumber.text.toString().trim(),
+            serviceClasses = binding.editServiceClasses.text.toString().trim(),
             rwLogin = binding.editRwLogin.text.toString().trim(),
             rwPassword = binding.editRwPassword.text.toString(),
             passengerLastName = binding.editPassengerLastName.text.toString().trim(),
@@ -188,7 +194,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         if (!data.enabled) return true
         
         if (data.trainNumber.isEmpty()) {
-            Toast.makeText(this, "Укажите номер поезда для автопокупки", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Укажите номер поезда для авторезерва", Toast.LENGTH_SHORT).show()
             return false
         }
         if (data.rwLogin.isEmpty() || data.rwPassword.isEmpty()) {
@@ -213,9 +219,10 @@ class CreateMonitoringActivity : AppCompatActivity() {
 
         // Парсим номера поездов из поля ввода (которое теперь в binding.editTrainNumber, но мы берем из data)
         // ВНИМАНИЕ: editTrainNumber теперь общий, но мы его читали в getAutoPurchaseData().
-        // Лучше прочитать напрямую, так как валидация autoPurchaseData может быть не нужна если автопокупка выключена
+        // Лучше прочитать напрямую, так как валидация autoPurchaseData может быть не нужна если авторезерв выключен
         val trainNumberInput = binding.editTrainNumber.text.toString().trim()
         val trainNumbers = MonitoringRoute.parseTrainNumbers(trainNumberInput)
+        val serviceClasses = MonitoringRoute.parseServiceClasses(autoPurchaseData.serviceClassesInput)
 
         val newRoute = MonitoringRoute(
             url = url,
@@ -225,6 +232,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
             trainNumbers = trainNumbers,
+            serviceClasses = serviceClasses,
             rwLogin = autoPurchaseData.rwLogin,
             rwPassword = autoPurchaseData.rwPassword,
             passengerLastName = autoPurchaseData.passengerLastName,
@@ -284,6 +292,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         
         val trainNumberInput = binding.editTrainNumber.text.toString().trim()
         val trainNumbers = MonitoringRoute.parseTrainNumbers(trainNumberInput)
+        val serviceClasses = MonitoringRoute.parseServiceClasses(autoPurchaseData.serviceClassesInput)
 
         val updatedRoute = existingRoute.copy(
             url = url,
@@ -293,6 +302,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
             trainNumbers = trainNumbers,
+            serviceClasses = serviceClasses,
             rwLogin = autoPurchaseData.rwLogin,
             rwPassword = autoPurchaseData.rwPassword,
             passengerLastName = autoPurchaseData.passengerLastName,

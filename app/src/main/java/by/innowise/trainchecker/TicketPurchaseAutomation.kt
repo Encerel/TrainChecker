@@ -22,7 +22,6 @@ class TicketPurchaseAutomation(
     companion object {
         private const val TAG = "TicketPurchase"
         private const val BASE_URL = "https://pass.rw.by"
-        private const val TARGET_SERVICE_CLASS = "2П"
         
         private fun ensureHttps(url: String): String {
             return if (url.startsWith("http://")) {
@@ -104,7 +103,7 @@ class TicketPurchaseAutomation(
             
             Log.d(TAG, "✓ Login successful. Proceeding to purchase...")
 
-            // === ШАГ 3: ПОКУПКА БИЛЕТА (с уже активной сессией) ===
+            // === ШАГ 3: РЕЗЕРВ БИЛЕТА (с уже активной сессией) ===
             Log.d(TAG, ">>> STEP 3: Purchasing ticket...")
             
             // Важно: нужно заново загрузить страницу маршрута, чтобы сервер "увидел" нашу сессию
@@ -129,12 +128,15 @@ class TicketPurchaseAutomation(
             val placesDoc = (placesPageResult as? PlacesPageLoaded)?.document
                 ?: return PurchaseResult.Error("Не удалось загрузить страницу выбора мест", "select_places")
 
-            // Выбираем вагон с окончанием (2П)
-            val carriageResult = selectCarriage2P(placesDoc)
+            // Выбираем подходящий класс вагона
+            val carriageResult = selectMatchingCarriage(placesDoc)
             if (carriageResult is PurchaseResult.Error) return carriageResult
 
             val carriageSelection = carriageResult as? CarriageSelected
-                ?: return PurchaseResult.Error("Не удалось выбрать вагон (2П)", "select_carriage")
+                ?: return PurchaseResult.Error(
+                    "Не удалось выбрать вагон (${route.serviceClassesFormatted})",
+                    "select_carriage"
+                )
 
             // Нажимаем "Ввести данные пассажиров"
             // Теперь мы авторизованы, поэтому должна открыться форма пассажира
@@ -769,8 +771,10 @@ class TicketPurchaseAutomation(
         return PlacesPageLoaded(doc)
     }
 
-    private fun selectCarriage2P(doc: Document): Any {
-        Log.d(TAG, "=== Selecting carriage with service class $TARGET_SERVICE_CLASS ===")
+    private fun selectMatchingCarriage(doc: Document): Any {
+        val targetServiceClasses = route.serviceClassesForAutoPurchase
+        val targetServiceClassesText = targetServiceClasses.joinToString(", ")
+        Log.d(TAG, "=== Selecting carriage with service classes: $targetServiceClassesText ===")
 
         val config = extractPlaceChoiceConfig(doc)
             ?: return PurchaseResult.Error(
@@ -795,7 +799,12 @@ class TicketPurchaseAutomation(
             if (carPlacesResult is PurchaseResult.Error) return carPlacesResult
 
             val carPlacesJson = (carPlacesResult as LoadedCarPlaces).json
-            val selected = findServiceClassCarriage(carType, carPlacesJson, checkedServiceClasses)
+            val selected = findServiceClassCarriage(
+                carType = carType,
+                carPlacesJson = carPlacesJson,
+                checkedServiceClasses = checkedServiceClasses,
+                targetServiceClasses = targetServiceClasses
+            )
             if (selected == null) continue
 
             val carNumber = selected.car.getStringOrEmpty("number")
@@ -822,7 +831,7 @@ class TicketPurchaseAutomation(
             .ifBlank { "не определены" }
 
         return PurchaseResult.Error(
-            "Вагон класса $TARGET_SERVICE_CLASS не найден. Найденные классы: $foundClasses",
+            "Вагон класса $targetServiceClassesText не найден. Найденные классы: $foundClasses",
             "select_carriage"
         )
     }
@@ -909,7 +918,8 @@ class TicketPurchaseAutomation(
     private fun findServiceClassCarriage(
         carType: String,
         carPlacesJson: JsonObject,
-        checkedServiceClasses: MutableSet<String>
+        checkedServiceClasses: MutableSet<String>,
+        targetServiceClasses: List<String>
     ): SelectedCarriage? {
         val tariffs = carPlacesJson.getAsJsonArrayOrNull("tariffs") ?: return null
 
@@ -919,7 +929,7 @@ class TicketPurchaseAutomation(
             val typeText = tariff.getStringOrEmpty("type")
             checkedServiceClasses.add(typeAbbr.ifBlank { typeText })
 
-            if (!matchesTargetServiceClass(typeAbbr, typeText)) {
+            if (!matchesTargetServiceClass(typeAbbr, typeText, targetServiceClasses)) {
                 return@forEach
             }
 
@@ -941,11 +951,17 @@ class TicketPurchaseAutomation(
         return null
     }
 
-    private fun matchesTargetServiceClass(typeAbbr: String, typeText: String): Boolean {
-        val normalizedTarget = TARGET_SERVICE_CLASS.replace("\\s+".toRegex(), "").uppercase()
+    private fun matchesTargetServiceClass(
+        typeAbbr: String,
+        typeText: String,
+        targetServiceClasses: List<String>
+    ): Boolean {
         val normalizedAbbr = typeAbbr.replace("\\s+".toRegex(), "").uppercase()
         val normalizedText = typeText.replace("\\s+".toRegex(), "").uppercase()
-        return normalizedAbbr == normalizedTarget || normalizedText.contains("($normalizedTarget)")
+        return targetServiceClasses.any { target ->
+            val normalizedTarget = target.replace("\\s+".toRegex(), "").uppercase()
+            normalizedAbbr == normalizedTarget || normalizedText.contains("($normalizedTarget)")
+        }
     }
 
     private fun loadCarDetails(config: PlaceChoiceConfig, selected: SelectedCarriage): Any {

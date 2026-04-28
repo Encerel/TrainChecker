@@ -1,13 +1,18 @@
 package by.innowise.trainchecker
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import by.innowise.trainchecker.databinding.ActivityRouteDetailsBinding
 import java.time.LocalDateTime
@@ -17,6 +22,18 @@ import java.time.format.DateTimeFormatter
 class RouteDetailsActivity : AppCompatActivity() {
     private lateinit var binding: ActivityRouteDetailsBinding
     private lateinit var route: MonitoringRoute
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(
+                this,
+                "Разрешите уведомления, чтобы видеть активный мониторинг",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     private val logReceiver = object : BroadcastReceiver() {
         @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -30,6 +47,8 @@ class RouteDetailsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestNotificationPermissionIfNeeded()
+
         binding = ActivityRouteDetailsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -49,9 +68,10 @@ class RouteDetailsActivity : AppCompatActivity() {
         binding.routeUrl.text = route.url
 
         val autoPurchaseInfo = if (route.autoPurchaseEnabled) {
-            "\n🛒 Автопокупка: ВКЛ (поезд ${route.trainNumber})"
+            val trains = route.trainNumbersFormatted.ifBlank { route.trainNumber }
+            "\n🛒 Авторезерв: ВКЛ (поезда $trains, классы ${route.serviceClassesFormatted})"
         } else {
-            "\n🛒 Автопокупка: ВЫКЛ"
+            "\n🛒 Авторезерв: ВЫКЛ"
         }
 
         binding.routeParameters.text = """
@@ -63,9 +83,10 @@ class RouteDetailsActivity : AppCompatActivity() {
         binding.routeCreationDate.text = "Создан: ${route.getCreationDateFormatted()}"
 
         binding.buttonStart.setOnClickListener {
-            startMonitoring(route.id)
-            route.isActive = true
-            updateRouteStatus()
+            if (startMonitoring(route.id)) {
+                route.isActive = true
+                updateRouteStatus()
+            }
         }
 
         binding.buttonStop.setOnClickListener {
@@ -120,12 +141,37 @@ class RouteDetailsActivity : AppCompatActivity() {
         }
     }
 
-    private fun startMonitoring(routeId: Long) {
+    private fun startMonitoring(routeId: Long): Boolean {
+        if (!hasNotificationPermission()) {
+            requestNotificationPermissionIfNeeded()
+            return false
+        }
+
         val intent = Intent(this, MonitorService::class.java).apply {
             action = MonitorService.ACTION_START
             putExtra("route_id", routeId)
         }
         startService(intent)
+        return true
+    }
+
+    private fun hasNotificationPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     private fun stopMonitoring(routeId: Long) {

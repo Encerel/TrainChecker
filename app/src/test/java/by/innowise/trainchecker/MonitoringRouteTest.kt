@@ -88,4 +88,37 @@ class MonitoringRouteTest {
         )
         assertEquals("", route.trainNumber)
     }
+
+    @Test
+    fun testParseServiceClasses_withCommas() {
+        val result = MonitoringRoute.parseServiceClasses("2П, 3Д, 3У")
+        assertEquals(listOf("2П", "3Д", "3У"), result)
+    }
+
+    @Test
+    fun testParseServiceClasses_normalizesCase() {
+        val result = MonitoringRoute.parseServiceClasses("2п, 3д")
+        assertEquals(listOf("2П", "3Д"), result)
+    }
+
+    @Test
+    fun testServiceClassesFormatted_default() {
+        val route = MonitoringRoute(
+            url = "https://example.com",
+            telegramToken = "token",
+            chatId = "123"
+        )
+        assertEquals("2П", route.serviceClassesFormatted)
+    }
+
+    @Test
+    fun testServiceClassesFormatted_customList() {
+        val route = MonitoringRoute(
+            url = "https://example.com",
+            telegramToken = "token",
+            chatId = "123",
+            serviceClasses = listOf("2П", "3Д")
+        )
+        assertEquals("2П, 3Д", route.serviceClassesFormatted)
+    }
 }

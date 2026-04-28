@@ -1,0 +1,88 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Android: devices",
+      "type": "shell",
+      "command": "adb devices",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: assemble debug",
+      "type": "shell",
+      "command": ".\\gradlew.bat :app:assembleDebug",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: install debug",
+      "type": "shell",
+      "command": ".\\gradlew.bat :app:installDebug",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: install debug and launch",
+      "type": "shell",
+      "command": ".\\gradlew.bat :app:installDebug; adb shell monkey -p by.innowise.trainchecker 1",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: reinstall debug (clears app data)",
+      "type": "shell",
+      "command": "adb uninstall by.innowise.trainchecker; .\\gradlew.bat :app:installDebug",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: reinstall debug and launch (clears app data)",
+      "type": "shell",
+      "command": "adb uninstall by.innowise.trainchecker; .\\gradlew.bat :app:installDebug; adb shell monkey -p by.innowise.trainchecker 1",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: backup app data",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File .\\.vscode\\backup-app-data.ps1",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: restore app data",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File .\\.vscode\\restore-app-data.ps1",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: reinstall debug preserving data",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File .\\.vscode\\reinstall-debug-preserving-data.ps1",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: uninstall app",
+      "type": "shell",
+      "command": "adb uninstall by.innowise.trainchecker",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: clear logcat",
+      "type": "shell",
+      "command": "adb logcat -c",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: logcat app",
+      "type": "shell",
+      "command": "$pkg = 'by.innowise.trainchecker'; $appPid = (adb shell pidof $pkg).Trim(); if (-not $appPid) { Write-Host \"App is not running, launching $pkg...\"; adb shell monkey -p $pkg 1 | Out-Null; Start-Sleep -Seconds 1; $appPid = (adb shell pidof $pkg).Trim(); }; if ($appPid) { adb logcat --pid $appPid } else { Write-Host \"Could not find process id, showing logs filtered by package name.\"; adb logcat | Select-String $pkg }",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: logcat all",
+      "type": "shell",
+      "command": "adb logcat",
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

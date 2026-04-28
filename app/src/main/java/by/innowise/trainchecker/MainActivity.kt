@@ -1,12 +1,18 @@
 package by.innowise.trainchecker
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import by.innowise.trainchecker.databinding.ActivityMainBinding
@@ -16,6 +22,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: MonitoringRoutesAdapter
     private val routes = mutableListOf<MonitoringRoute>()
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(
+                this,
+                "Разрешите уведомления, чтобы видеть активный мониторинг",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -29,22 +46,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        if (intent?.action == "OPEN_FROM_NOTIFICATION") {
-            val activeRouteIds = MonitorService.getActiveRoutes(this)
-            if (activeRouteIds.isNotEmpty()) {
-                val activeRoute = routes.find { it.id == activeRouteIds.first() }
-                activeRoute?.let {
-                    showRouteDetails(it)
-                }
-            }
-        }
+        requestNotificationPermissionIfNeeded()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         setupRecyclerView()
         loadRoutes()
+        handleOpenFromNotification()
 
         binding.buttonInstructions.setOnClickListener {
             startActivity(Intent(this, InstructionsActivity::class.java))
@@ -107,13 +116,45 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
+    private fun handleOpenFromNotification() {
+        if (intent?.action != "OPEN_FROM_NOTIFICATION") return
+
+        val activeRouteIds = MonitorService.getActiveRoutes(this)
+        val activeRoute = routes.find { it.id == activeRouteIds.firstOrNull() }
+        activeRoute?.let { showRouteDetails(it) }
+    }
+
     private fun startMonitoring(routeId: Long) {
+        if (!hasNotificationPermission()) {
+            requestNotificationPermissionIfNeeded()
+            return
+        }
+
         val route = routes.find { it.id == routeId } ?: return
         val intent = Intent(this, MonitorService::class.java).apply {
             action = MonitorService.ACTION_START
             putExtra("route_id", route.id)
         }
         startService(intent)
+    }
+
+    private fun hasNotificationPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     private fun stopMonitoring(routeId: Long) {

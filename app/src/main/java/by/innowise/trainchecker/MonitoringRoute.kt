@@ -17,9 +17,10 @@ data class MonitoringRoute(
     var isActive: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val logs: MutableList<String> = mutableListOf(),
-    // Поля для автопокупки (опциональные)
+    // Поля для авторезерва (опциональные)
     val autoPurchaseEnabled: Boolean = false,
     val trainNumbers: List<String> = emptyList(),
+    val serviceClasses: List<String>? = null,
     val rwLogin: String = "",
     val rwPassword: String = "",
     // Данные пассажира
@@ -29,6 +30,8 @@ data class MonitoringRoute(
     val passengerDocumentNumber: String = ""
 ) {
     companion object {
+        const val DEFAULT_SERVICE_CLASS = "2П"
+
         /**
          * Парсит строку с номерами поездов, разделенными различными разделителями
          * Поддерживаемые разделители: запятая, точка с запятой, точка, пробел
@@ -36,6 +39,18 @@ data class MonitoringRoute(
          * @return список номеров поездов
          */
         fun parseTrainNumbers(input: String): List<String> {
+            return parseDelimitedValues(input)
+        }
+
+        /**
+         * Парсит классы вагонов для авторезерва (например: "2П, 3Д").
+         */
+        fun parseServiceClasses(input: String): List<String> {
+            return parseDelimitedValues(input)
+                .map { it.uppercase(Locale.ROOT) }
+        }
+
+        private fun parseDelimitedValues(input: String): List<String> {
             return input.split(Regex("[,;.\\s]+"))
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
@@ -47,10 +62,19 @@ data class MonitoringRoute(
      */
     val trainNumbersFormatted: String
         get() = trainNumbers.joinToString(", ")
+
+    val serviceClassesForAutoPurchase: List<String>
+        get() = serviceClasses
+            ?.filter { it.isNotBlank() }
+            ?.ifEmpty { listOf(DEFAULT_SERVICE_CLASS) }
+            ?: listOf(DEFAULT_SERVICE_CLASS)
+
+    val serviceClassesFormatted: String
+        get() = serviceClassesForAutoPurchase.joinToString(", ")
     
     /**
      * Обратная совместимость: возвращает первый номер поезда или пустую строку
-     * Используется в автопокупке (которая пока не обновлена)
+     * Используется в авторезерве
      */
     val trainNumber: String
         get() = trainNumbers.firstOrNull() ?: ""
