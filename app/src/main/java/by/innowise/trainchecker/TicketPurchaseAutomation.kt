@@ -1361,16 +1361,17 @@ class TicketPurchaseAutomation(
         
         Log.d(TAG, "Passenger form check: hasPassengerForm=$hasPassengerForm, hasPassengerFields=$hasPassengerFields")
         
-        // Если есть РЕАЛЬНАЯ форма логина (оба поля) - нужна авторизация
-        if (hasLoginForm) {
-            Log.d(TAG, "✓ Login IS REQUIRED - found login form with both fields")
-            return PurchaseResult.NeedsLogin("$BASE_URL/ru/login")
-        }
-        
         // Если есть форма пассажира или поля пассажира - авторизация НЕ нужна
         if (hasPassengerForm || hasPassengerFields) {
             Log.d(TAG, "✓ Login NOT required - passenger form found")
             return PassengerFormLoaded(resultDoc)
+        }
+
+        // Если есть РЕАЛЬНАЯ форма логина (оба поля) и нет формы пассажира - нужна авторизация.
+        // На pass.rw.by модальная форма входа может присутствовать в разметке даже на странице пассажира.
+        if (hasLoginForm) {
+            Log.d(TAG, "✓ Login IS REQUIRED - found login form with both fields and no passenger form")
+            return PurchaseResult.NeedsLogin("$BASE_URL/ru/login")
         }
         
         // Если непонятно - выводим больше информации

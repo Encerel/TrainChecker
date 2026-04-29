@@ -37,7 +37,7 @@ class MonitorService : Service() {
         const val CHANNEL_ID = "MonitorServiceChannel"
         const val NOTIF_ID = 1
         private const val CART_RESERVATION_TIMEOUT_MS = 20 * 60 * 1000L
-        private const val CART_RESERVATION_GRACE_MS = 30 * 1000L
+        private const val CART_RESERVATION_GRACE_MS = 10 * 1000L
 
         fun getActiveRoutes(context: Context): List<Long> {
             val prefs = context.getSharedPreferences("monitor_service", Context.MODE_PRIVATE)
@@ -442,7 +442,7 @@ class MonitorService : Service() {
             try {
                 sendLog(
                     routeId = route.id,
-                    message = "Повторный авторезерв запланирован через 20 мин 30 сек",
+                    message = "Повторный авторезерв запланирован через 20 мин 10 сек",
                     category = MonitoringLogCategory.AUTO_PURCHASE
                 )
                 delay(delayMs)

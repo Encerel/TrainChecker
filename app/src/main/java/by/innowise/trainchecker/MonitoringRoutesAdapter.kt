@@ -14,6 +14,7 @@ class MonitoringRoutesAdapter(
     private val onItemClick: (MonitoringRoute) -> Unit,
     private val onStartClick: (Long) -> Unit,
     private val onStopClick: (Long) -> Unit,
+    private val onCopyClick: (Long) -> Unit,
     private val onDeleteClick: (Long) -> Unit
 ) : RecyclerView.Adapter<MonitoringRoutesAdapter.RouteViewHolder>() {
 
@@ -59,6 +60,7 @@ class MonitoringRoutesAdapter(
 
             buttonStart.setOnClickListener { onStartClick(route.id) }
             buttonStop.setOnClickListener { onStopClick(route.id) }
+            buttonCopy.setOnClickListener { onCopyClick(route.id) }
             buttonDelete.setOnClickListener { onDeleteClick(route.id) }
 
             root.setOnClickListener { onItemClick(route) }

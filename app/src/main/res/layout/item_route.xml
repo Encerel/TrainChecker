@@ -83,7 +83,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:weightSum="3">
+            android:weightSum="4">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/buttonStart"
@@ -111,6 +111,21 @@
                 android:textAllCaps="false"
                 app:cornerRadius="@dimen/button_corner_radius"
                 app:backgroundTint="@color/warning" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonCopy"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/spacing_tiny"
+                android:layout_marginEnd="@dimen/spacing_tiny"
+                android:text="⧉"
+                android:textSize="@dimen/text_size_medium"
+                android:textAllCaps="false"
+                app:cornerRadius="@dimen/button_corner_radius"
+                app:strokeColor="@color/primary"
+                app:strokeWidth="1dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/buttonDelete"

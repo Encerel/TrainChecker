@@ -101,6 +101,9 @@ class MainActivity : AppCompatActivity() {
                 stopMonitoring(routeId)
                 adapter.notifyDataSetChanged()
             },
+            onCopyClick = { routeId ->
+                copyRoute(routeId)
+            },
             onDeleteClick = { routeId ->
                 deleteRoute(routeId)
             }
@@ -169,6 +172,39 @@ class MainActivity : AppCompatActivity() {
             putExtra("route_id", routeId)
         }
         startService(intent)
+    }
+
+    private fun copyRoute(routeId: Long) {
+        val sourceRoute = routes.find { it.id == routeId } ?: return
+        val newRouteId = generateRouteId()
+        val copiedRoute = sourceRoute.copy(
+            id = newRouteId,
+            name = "${sourceRoute.name} (копия)",
+            isActive = false,
+            createdAt = System.currentTimeMillis(),
+            logs = mutableListOf()
+        )
+
+        if (RwPasswordManager.hasPassword(this, sourceRoute.id)) {
+            RwPasswordManager.getPassword(this, sourceRoute.id)?.let { password ->
+                RwPasswordManager.savePassword(this, newRouteId, password)
+            }
+        }
+
+        val updatedRoutes = MonitoringPreferenceManager.getRoutes(this).toMutableList()
+        updatedRoutes.add(copiedRoute)
+        MonitoringPreferenceManager.saveRoutes(this, updatedRoutes)
+        loadRoutes()
+        Toast.makeText(this, "Маршрут скопирован", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun generateRouteId(): Long {
+        val existingIds = MonitoringPreferenceManager.getRoutes(this).map { it.id }.toSet()
+        var candidate = System.currentTimeMillis()
+        while (candidate in existingIds) {
+            candidate += 1
+        }
+        return candidate
     }
 
     private fun deleteRoute(routeId: Long) {
