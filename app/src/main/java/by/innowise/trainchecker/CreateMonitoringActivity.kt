@@ -6,14 +6,18 @@ import android.widget.ArrayAdapter
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import android.view.View
 import by.innowise.trainchecker.databinding.ActivityCreateMonitoringBinding
 import by.innowise.trainchecker.databinding.DialogManageChatIdsBinding
+import kotlinx.coroutines.launch
 
 
 class CreateMonitoringActivity : AppCompatActivity() {
     private lateinit var binding: ActivityCreateMonitoringBinding
+    private lateinit var passengerProfileRepository: PassengerProfileRepository
+    private var passengerProfiles: List<PassengerProfile> = emptyList()
     private var editingRouteId: Long? = null
     private var isEditMode = false
 
@@ -21,6 +25,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityCreateMonitoringBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        passengerProfileRepository = PassengerProfileRepository(this)
 
         editingRouteId = intent.getLongExtra("route_id", -1).takeIf { it != -1L }
         isEditMode = editingRouteId != null
@@ -28,6 +33,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         setupChatIdAutocomplete()
 
         setupAutoPurchaseToggle()
+        setupPassengerProfiles()
 
         if (isEditMode) {
             loadRouteForEditing()
@@ -62,25 +68,67 @@ class CreateMonitoringActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::binding.isInitialized && ::passengerProfileRepository.isInitialized) {
+            loadPassengerProfiles()
+        }
+    }
+
     private fun setupAutoPurchaseToggle() {
         binding.switchAutoPurchase.setOnCheckedChangeListener { _, isChecked ->
             binding.autoPurchaseFields.visibility = if (isChecked) View.VISIBLE else View.GONE
         }
     }
 
+    private fun setupPassengerProfiles() {
+        binding.autoPassengerProfile.setOnItemClickListener { _, _, position, _ ->
+            passengerProfiles.getOrNull(position)?.let { profile ->
+                applyPassengerProfile(profile)
+            }
+        }
+
+        binding.autoPassengerProfile.setOnClickListener {
+            if (passengerProfiles.isNotEmpty()) {
+                binding.autoPassengerProfile.showDropDown()
+            }
+        }
+
+        binding.buttonOpenPassengerProfiles.setOnClickListener {
+            startActivity(Intent(this, PassengerProfilesActivity::class.java))
+        }
+
+        loadPassengerProfiles()
+    }
+
+    private fun loadPassengerProfiles() {
+        lifecycleScope.launch {
+            passengerProfiles = passengerProfileRepository.getAll()
+            val adapter = ArrayAdapter(
+                this@CreateMonitoringActivity,
+                android.R.layout.simple_dropdown_item_1line,
+                passengerProfiles.map { it.name }
+            )
+            binding.autoPassengerProfile.setAdapter(adapter)
+        }
+    }
+
+    private fun applyPassengerProfile(profile: PassengerProfile) {
+        binding.autoPassengerProfile.setText(profile.name, false)
+        binding.editChatId.setText(profile.chatId)
+    }
+
+    private fun getSelectedPassengerProfile(): PassengerProfile? {
+        val profileName = binding.autoPassengerProfile.text.toString().trim()
+        return passengerProfiles.find { it.name == profileName }
+    }
+
     private fun loadDefaultPassengerData() {
         MonitoringPreferenceManager.getDefaultPassengerData(this)?.let { data ->
             binding.editServiceClasses.setText(data.serviceClassesInput)
-            binding.editPassengerLastName.setText(data.lastName)
-            binding.editPassengerFirstName.setText(data.firstName)
-            binding.editPassengerMiddleName.setText(data.middleName)
-            binding.editPassengerDocument.setText(data.documentNumber)
         } ?: binding.editServiceClasses.setText(MonitoringRoute.DEFAULT_SERVICE_CLASS)
         if (binding.editServiceClasses.text.isNullOrBlank()) {
             binding.editServiceClasses.setText(MonitoringRoute.DEFAULT_SERVICE_CLASS)
-        }
-        MonitoringPreferenceManager.getDefaultRwLogin(this)?.let {
-            binding.editRwLogin.setText(it)
         }
     }
 
@@ -103,12 +151,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         binding.switchAutoPurchase.isChecked = route.autoPurchaseEnabled
         binding.autoPurchaseFields.visibility = if (route.autoPurchaseEnabled) View.VISIBLE else View.GONE
         binding.editServiceClasses.setText(route.serviceClassesFormatted)
-        binding.editRwLogin.setText(route.rwLogin)
-        binding.editRwPassword.setText(route.rwPassword)
-        binding.editPassengerLastName.setText(route.passengerLastName)
-        binding.editPassengerFirstName.setText(route.passengerFirstName)
-        binding.editPassengerMiddleName.setText(route.passengerMiddleName)
-        binding.editPassengerDocument.setText(route.passengerDocumentNumber)
+        binding.autoPassengerProfile.setText(route.passengerProfileName, false)
     }
 
     private fun setupChatIdAutocomplete() {
@@ -177,16 +220,20 @@ class CreateMonitoringActivity : AppCompatActivity() {
     }
 
     private fun getAutoPurchaseData(): AutoPurchaseData {
+        val selectedProfile = getSelectedPassengerProfile()
         return AutoPurchaseData(
             enabled = binding.switchAutoPurchase.isChecked,
             trainNumber = binding.editTrainNumber.text.toString().trim(),
             serviceClasses = binding.editServiceClasses.text.toString().trim(),
-            rwLogin = binding.editRwLogin.text.toString().trim(),
-            rwPassword = binding.editRwPassword.text.toString(),
-            passengerLastName = binding.editPassengerLastName.text.toString().trim(),
-            passengerFirstName = binding.editPassengerFirstName.text.toString().trim(),
-            passengerMiddleName = binding.editPassengerMiddleName.text.toString().trim(),
-            passengerDocumentNumber = binding.editPassengerDocument.text.toString().trim()
+            passengerProfileName = selectedProfile?.name.orEmpty(),
+            rwLogin = selectedProfile?.rwLogin.orEmpty(),
+            rwPassword = selectedProfile
+                ?.let { PassengerProfilePasswordManager.getPassword(this, it.name) }
+                .orEmpty(),
+            passengerLastName = selectedProfile?.lastName.orEmpty(),
+            passengerFirstName = selectedProfile?.firstName.orEmpty(),
+            passengerMiddleName = selectedProfile?.middleName.orEmpty(),
+            passengerDocumentNumber = selectedProfile?.documentNumber.orEmpty()
         )
     }
 
@@ -197,16 +244,19 @@ class CreateMonitoringActivity : AppCompatActivity() {
             Toast.makeText(this, "Укажите номер поезда для авторезерва", Toast.LENGTH_SHORT).show()
             return false
         }
-        if (data.rwLogin.isEmpty() || data.rwPassword.isEmpty()) {
-            Toast.makeText(this, "Укажите логин и пароль pass.rw.by", Toast.LENGTH_SHORT).show()
+        if (data.passengerProfileName.isBlank()) {
+            Toast.makeText(this, "Выберите профиль пассажира для авторезерва", Toast.LENGTH_SHORT).show()
             return false
         }
-        if (data.passengerLastName.isEmpty() || data.passengerFirstName.isEmpty()) {
-            Toast.makeText(this, "Укажите ФИО пассажира", Toast.LENGTH_SHORT).show()
+        if (data.rwLogin.isEmpty() || data.rwPassword.isBlank()) {
+            Toast.makeText(this, "В выбранном профиле укажите логин и пароль pass.rw.by", Toast.LENGTH_SHORT).show()
             return false
         }
-        if (data.passengerDocumentNumber.isEmpty()) {
-            Toast.makeText(this, "Укажите номер документа", Toast.LENGTH_SHORT).show()
+        if (data.passengerLastName.isEmpty() ||
+            data.passengerFirstName.isEmpty() ||
+            data.passengerDocumentNumber.isEmpty()
+        ) {
+            Toast.makeText(this, "В выбранном профиле заполните ФИО и документ", Toast.LENGTH_SHORT).show()
             return false
         }
         return true
@@ -224,23 +274,35 @@ class CreateMonitoringActivity : AppCompatActivity() {
         val trainNumbers = MonitoringRoute.parseTrainNumbers(trainNumberInput)
         val serviceClasses = MonitoringRoute.parseServiceClasses(autoPurchaseData.serviceClassesInput)
 
+        val password = autoPurchaseData.rwPassword
+        val effectiveChatId = if (autoPurchaseData.enabled && getSelectedPassengerProfile() != null) {
+            getSelectedPassengerProfile()?.chatId.orEmpty()
+        } else {
+            chatId
+        }
         val newRoute = MonitoringRoute(
             url = url,
             telegramToken = token,
-            chatId = chatId,
+            chatId = effectiveChatId,
             checkIntervalSec = checkInterval,
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
+            passengerProfileName = autoPurchaseData.passengerProfileName,
             trainNumbers = trainNumbers,
             serviceClasses = serviceClasses,
             rwLogin = autoPurchaseData.rwLogin,
-            rwPassword = autoPurchaseData.rwPassword,
+            hasSavedRwPassword = password.isNotBlank(),
+            rwPassword = "",
             passengerLastName = autoPurchaseData.passengerLastName,
             passengerFirstName = autoPurchaseData.passengerFirstName,
             passengerMiddleName = autoPurchaseData.passengerMiddleName,
             passengerDocumentNumber = autoPurchaseData.passengerDocumentNumber
         ).apply {
             name = extractNameFromUrl()
+        }
+
+        if (password.isNotBlank()) {
+            RwPasswordManager.savePassword(this, newRoute.id, password)
         }
 
         val currentRoutes = MonitoringPreferenceManager.getRoutes(this).toMutableList()
@@ -250,15 +312,14 @@ class CreateMonitoringActivity : AppCompatActivity() {
         if (token.isNotBlank()) {
             MonitoringPreferenceManager.saveDefaultToken(this, token)
         }
-        if (chatId.isNotBlank()) {
-            MonitoringPreferenceManager.saveDefaultChatId(this, chatId)
-            MonitoringPreferenceManager.saveChatIdToHistory(this, chatId)
+        if (effectiveChatId.isNotBlank()) {
+            MonitoringPreferenceManager.saveDefaultChatId(this, effectiveChatId)
+            MonitoringPreferenceManager.saveChatIdToHistory(this, effectiveChatId)
         }
 
         // Сохраняем данные пассажира как дефолтные
         if (autoPurchaseData.enabled) {
             MonitoringPreferenceManager.saveDefaultPassengerData(this, autoPurchaseData)
-            MonitoringPreferenceManager.saveDefaultRwLogin(this, autoPurchaseData.rwLogin)
         }
 
         Toast.makeText(this, "Маршрут создан", Toast.LENGTH_SHORT).show()
@@ -294,17 +355,32 @@ class CreateMonitoringActivity : AppCompatActivity() {
         val trainNumbers = MonitoringRoute.parseTrainNumbers(trainNumberInput)
         val serviceClasses = MonitoringRoute.parseServiceClasses(autoPurchaseData.serviceClassesInput)
 
+        val password = autoPurchaseData.rwPassword
+        val effectiveChatId = if (autoPurchaseData.enabled && getSelectedPassengerProfile() != null) {
+            getSelectedPassengerProfile()?.chatId.orEmpty()
+        } else {
+            chatId
+        }
+        val hasSavedPassword = if (password.isNotBlank()) {
+            RwPasswordManager.savePassword(this, existingRoute.id, password)
+            true
+        } else {
+            existingRoute.hasSavedRwPassword || RwPasswordManager.hasPassword(this, existingRoute.id)
+        }
+
         val updatedRoute = existingRoute.copy(
             url = url,
             telegramToken = token,
-            chatId = chatId,
+            chatId = effectiveChatId,
             checkIntervalSec = checkInterval,
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
+            passengerProfileName = autoPurchaseData.passengerProfileName,
             trainNumbers = trainNumbers,
             serviceClasses = serviceClasses,
             rwLogin = autoPurchaseData.rwLogin,
-            rwPassword = autoPurchaseData.rwPassword,
+            hasSavedRwPassword = hasSavedPassword,
+            rwPassword = "",
             passengerLastName = autoPurchaseData.passengerLastName,
             passengerFirstName = autoPurchaseData.passengerFirstName,
             passengerMiddleName = autoPurchaseData.passengerMiddleName,
@@ -319,14 +395,13 @@ class CreateMonitoringActivity : AppCompatActivity() {
         if (token.isNotBlank()) {
             MonitoringPreferenceManager.saveDefaultToken(this, token)
         }
-        if (chatId.isNotBlank()) {
-            MonitoringPreferenceManager.saveDefaultChatId(this, chatId)
-            MonitoringPreferenceManager.saveChatIdToHistory(this, chatId)
+        if (effectiveChatId.isNotBlank()) {
+            MonitoringPreferenceManager.saveDefaultChatId(this, effectiveChatId)
+            MonitoringPreferenceManager.saveChatIdToHistory(this, effectiveChatId)
         }
 
         if (autoPurchaseData.enabled) {
             MonitoringPreferenceManager.saveDefaultPassengerData(this, autoPurchaseData)
-            MonitoringPreferenceManager.saveDefaultRwLogin(this, autoPurchaseData.rwLogin)
         }
 
         if (wasActive) {

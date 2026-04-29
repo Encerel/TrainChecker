@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:elevation="4dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/primary"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:title="Профили пассажиров"
+            app:titleTextColor="@color/white" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_medium">
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/spacing_medium"
+                app:cardBackgroundColor="@color/card_background"
+                app:cardCornerRadius="@dimen/card_corner_radius"
+                app:cardElevation="@dimen/card_elevation">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_medium">
+
+                    <TextView
+                        android:id="@+id/formTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_small"
+                        android:text="Новый профиль"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_size_large"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_small"
+                        android:hint="Название профиля"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editProfileName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textCapWords" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_small"
+                        android:hint="Telegram Chat ID"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editProfileChatId"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="numberSigned" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_small"
+                        android:hint="Логин/E-mail pass.rw.by"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editProfileRwLogin"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textEmailAddress" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/profilePasswordInputLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_small"
+                        android:hint="Пароль pass.rw.by"
+                        app:boxBackgroundMode="outline"
+                        app:endIconMode="password_toggle">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editProfileRwPassword"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textPassword" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_small"
+                        android:hint="Фамилия"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editProfileLastName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textPersonName" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_small"
+                        android:hint="Имя"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editProfileFirstName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textPersonName" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_small"
+                        android:hint="Отчество"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editProfileMiddleName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textPersonName" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_medium"
+                        android:hint="Номер документа"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editProfileDocument"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:weightSum="2">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/buttonSaveProfile"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginEnd="@dimen/spacing_small"
+                            android:layout_weight="1"
+                            android:text="Сохранить"
+                            android:textAllCaps="false"
+                            app:backgroundTint="@color/primary"
+                            app:cornerRadius="@dimen/button_corner_radius" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/buttonClearProfileForm"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="@dimen/spacing_small"
+                            android:layout_weight="1"
+                            android:text="Очистить"
+                            android:textAllCaps="false"
+                            app:cornerRadius="@dimen/button_corner_radius"
+                            app:strokeColor="@color/primary"
+                            app:strokeWidth="1dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/spacing_small"
+                android:text="Сохраненные профили"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_size_large"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/passengerProfilesRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                tools:listitem="@layout/item_passenger_profile" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

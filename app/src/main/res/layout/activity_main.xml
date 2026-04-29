@@ -110,6 +110,19 @@
                         app:strokeWidth="2dp" />
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/buttonPassengerProfiles"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:text="👤 Профили пассажиров"
+                        android:textSize="@dimen/text_size_medium"
+                        android:textAllCaps="false"
+                        app:cornerRadius="@dimen/button_corner_radius"
+                        app:strokeColor="@color/primary"
+                        app:strokeWidth="2dp" />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonOpenWebsite"
                         style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="match_parent"

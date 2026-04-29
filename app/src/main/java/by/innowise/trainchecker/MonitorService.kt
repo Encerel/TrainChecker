@@ -12,10 +12,10 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -36,6 +36,8 @@ class MonitorService : Service() {
         const val ACTION_STOP_ALL = "ACTION_STOP_ALL"
         const val CHANNEL_ID = "MonitorServiceChannel"
         const val NOTIF_ID = 1
+        private const val CART_RESERVATION_TIMEOUT_MS = 20 * 60 * 1000L
+        private const val CART_RESERVATION_GRACE_MS = 30 * 1000L
 
         fun getActiveRoutes(context: Context): List<Long> {
             val prefs = context.getSharedPreferences("monitor_service", Context.MODE_PRIVATE)
@@ -43,9 +45,14 @@ class MonitorService : Service() {
         }
     }
 
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private val activeMonitors = mutableMapOf<Long, Job>()
+    private val activeAutoPurchases = mutableMapOf<Long, Job>()
+    private val autoPurchaseRenewals = mutableMapOf<Long, Job>()
     private val client = OkHttpClient()
-    private val gson = Gson()
+    private val logRepository by lazy { MonitoringLogRepository(this) }
+    private val passengerProfileRepository by lazy { PassengerProfileRepository(this) }
     private val notificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
@@ -95,7 +102,7 @@ class MonitorService : Service() {
             return
         }
 
-        val job = CoroutineScope(Dispatchers.IO).launch {
+        val job = serviceScope.launch {
             var lastStatus = false
             var lastHeartbeatTime = System.currentTimeMillis()
 
@@ -165,31 +172,59 @@ class MonitorService : Service() {
                             sendTelegramMessage(route, message)
                             
                             val logMessage = "МЕСТА НАЙДЕНЫ. Подходящих поездов: $availableTrainCount. Поезда: ${matchingAvailableTrains.joinToString(", ")}"
-                            sendLog(routeId, logMessage)
+                            sendLog(
+                                routeId = routeId,
+                                message = logMessage,
+                                level = MonitoringLogLevel.SUCCESS,
+                                category = MonitoringLogCategory.AVAILABILITY
+                            )
                             
                             // Авторезерв если включен
                             if (route.autoPurchaseEnabled && route.trainNumber.isNotEmpty()) {
-                                sendLog(routeId, "Запуск авторезерва для поезда ${route.trainNumber}...")
+                                sendLog(
+                                    routeId = routeId,
+                                    message = "Запуск авторезерва для поезда ${route.trainNumber}...",
+                                    category = MonitoringLogCategory.AUTO_PURCHASE
+                                )
                                 attemptAutoPurchase(route)
                             }
                         }
                         lastStatus = true
                     } else {
-                        // Логируем, почему не сработало
                         if (route.trainNumbers.isNotEmpty() && availableRows.isNotEmpty()) {
                             val foundTrains = availableRows.mapNotNull { row ->
                                 row.attr("data-train-number").trim().ifEmpty {
                                     row.selectFirst("span.train-number")?.text()?.trim()
                                 }
                             }.filter { it.isNotEmpty() }
-                            val foundTrainsStr = if (foundTrains.isNotEmpty()) " Найдены места для: ${foundTrains.joinToString(", ")}" else ""
-                            sendLog(routeId, "Места есть (${availableRows.size} шт), но не для поездов: ${route.trainNumbersFormatted}.$foundTrainsStr")
+                            val foundTrainsStr = if (foundTrains.isNotEmpty()) {
+                                " Найдены места для: ${foundTrains.joinToString(", ")}"
+                            } else {
+                                ""
+                            }
+                            sendLog(
+                                routeId = routeId,
+                                message = "Места есть (${availableRows.size} шт), но не для поездов: ${route.trainNumbersFormatted}.$foundTrainsStr",
+                                category = MonitoringLogCategory.AVAILABILITY,
+                                important = false
+                            )
                         } else {
-                            sendLog(routeId, "Места НЕ найдены (подходящих: $availableTrainCount)")
+                            sendLog(
+                                routeId = routeId,
+                                message = "Места НЕ найдены (подходящих: $availableTrainCount)",
+                                category = MonitoringLogCategory.AVAILABILITY,
+                                important = false
+                            )
                         }
                         
                         if (lastStatus) {
                             sendTelegramMessage(route, "❌ На маршруте ${route.name} места закончились")
+                            sendLog(
+                                routeId = routeId,
+                                message = "Места закончились после предыдущего обнаружения",
+                                level = MonitoringLogLevel.WARNING,
+                                category = MonitoringLogCategory.AVAILABILITY
+                            )
                         }
                         lastStatus = false
                     }
@@ -198,12 +233,22 @@ class MonitorService : Service() {
                     val now = System.currentTimeMillis()
                     if (now - lastHeartbeatTime >= route.healthIntervalMin * 60 * 1000) {
                         sendTelegramMessage(route, "🟢 Мониторинг маршрута ${route.name} активен")
-                        sendLog(routeId, "Мониторинг маршрута ${route.name} активен")
+                        sendLog(
+                            routeId = routeId,
+                            message = "Мониторинг маршрута ${route.name} активен",
+                            category = MonitoringLogCategory.MONITORING,
+                            important = false
+                        )
                         lastHeartbeatTime = now
                     }
                 } catch (e: Exception) {
                     val errorMessage = e.message ?: ""
-                    sendLog(routeId, "Ошибка: $errorMessage")
+                    sendLog(
+                        routeId = routeId,
+                        message = "Ошибка: $errorMessage",
+                        level = MonitoringLogLevel.ERROR,
+                        category = MonitoringLogCategory.SYSTEM
+                    )
                 }
                 delay(route.checkIntervalSec * 1000)
 
@@ -213,55 +258,236 @@ class MonitorService : Service() {
 
         activeMonitors[routeId] = job
         updateNotification()
-        sendLog(routeId, "Мониторинг запущен")
+        sendLog(routeId, "Мониторинг запущен", category = MonitoringLogCategory.MONITORING)
         updateRouteStatus(routeId, true)
     }
 
     private fun stopMonitoring(routeId: Long) {
         activeMonitors[routeId]?.cancel()
         activeMonitors.remove(routeId)
+        cancelAutoPurchaseJobs(routeId)
         updateRouteStatus(routeId, false)
         updateNotification()
-        sendLog(routeId, "Мониторинг остановлен")
+        sendLog(routeId, "Мониторинг остановлен", category = MonitoringLogCategory.MONITORING)
     }
 
     private fun stopAllMonitoring() {
         activeMonitors.values.forEach { it.cancel() }
         activeMonitors.clear()
+        activeAutoPurchases.values.forEach { it.cancel() }
+        activeAutoPurchases.clear()
+        autoPurchaseRenewals.values.forEach { it.cancel() }
+        autoPurchaseRenewals.clear()
         updateNotification()
         getSharedPreferences("monitor_service", Context.MODE_PRIVATE).edit()
             .remove("active_routes")
             .apply()
     }
 
-    private fun attemptAutoPurchase(route: MonitoringRoute) {
-        CoroutineScope(Dispatchers.IO).launch {
+    private fun attemptAutoPurchase(route: MonitoringRoute, isRenewal: Boolean = false) {
+        if (activeAutoPurchases[route.id]?.isActive == true) {
+            sendLog(
+                routeId = route.id,
+                message = "Авторезерв уже выполняется, повторный запуск пропущен",
+                category = MonitoringLogCategory.AUTO_PURCHASE
+            )
+            return
+        }
+
+        val job = serviceScope.launch {
             try {
-                sendLog(route.id, "Авторезерв: начало процесса...")
+                val currentRoute = getActiveAutoPurchaseRoute(route.id)
+                if (currentRoute == null) {
+                    sendLog(
+                        routeId = route.id,
+                        message = "Авторезерв отменен: маршрут остановлен или авторезерв выключен",
+                        level = MonitoringLogLevel.WARNING,
+                        category = MonitoringLogCategory.AUTO_PURCHASE
+                    )
+                    return@launch
+                }
+
+                val startMessage = if (isRenewal) {
+                    "Повторный авторезерв: начало процесса после окончания брони..."
+                } else {
+                    "Авторезерв: начало процесса..."
+                }
+                sendLog(
+                    routeId = route.id,
+                    message = startMessage,
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
                 
-                val automation = TicketPurchaseAutomation(route)
+                val resolvedAutoPurchase = resolveAutoPurchaseRoute(currentRoute) ?: return@launch
+                val automation = TicketPurchaseAutomation(
+                    resolvedAutoPurchase.route,
+                    resolvedAutoPurchase.password
+                )
                 val result = automation.attemptPurchase()
                 
                 when (result) {
                     is TicketPurchaseAutomation.PurchaseResult.Success -> {
-                        sendLog(route.id, "Авторезерв УСПЕШЕН: ${result.message}")
-                        sendTelegramMessage(
-                            route,
-                            "🎉 Заказ по маршруту ${route.name} успешно зарезервирован.\n${result.message}\nПроверьте корзину заказов на pass.rw.by."
+                        sendLog(
+                            routeId = route.id,
+                            message = "Авторезерв УСПЕШЕН: ${result.message}",
+                            level = MonitoringLogLevel.SUCCESS,
+                            category = MonitoringLogCategory.AUTO_PURCHASE
                         )
+                        sendTelegramMessage(
+                            resolvedAutoPurchase.route,
+                            "🎉 Заказ по маршруту ${resolvedAutoPurchase.route.name} успешно зарезервирован.\n" +
+                                "${result.message}\n" +
+                                "Проверьте корзину заказов на pass.rw.by.\n" +
+                                "Если вы оплатили билет, остановите мониторинг маршрута. Если не успеете оплатить за 20 минут, приложение попробует зарезервировать билет снова."
+                        )
+                        scheduleAutoPurchaseRenewal(resolvedAutoPurchase.route)
                     }
                     is TicketPurchaseAutomation.PurchaseResult.Error -> {
-                        sendLog(route.id, "Авторезерв ОШИБКА на шаге ${result.step}: ${result.message}")
+                        sendLog(
+                            routeId = route.id,
+                            message = "Авторезерв ОШИБКА на шаге ${result.step}: ${result.message}",
+                            level = MonitoringLogLevel.ERROR,
+                            category = MonitoringLogCategory.AUTO_PURCHASE
+                        )
                     }
                     is TicketPurchaseAutomation.PurchaseResult.NeedsLogin -> {
-                        sendLog(route.id, "Авторезерв: требуется авторизация, повторная попытка...")
+                        sendLog(
+                            routeId = route.id,
+                            message = "Авторезерв: требуется авторизация, повторная попытка...",
+                            level = MonitoringLogLevel.WARNING,
+                            category = MonitoringLogCategory.AUTO_PURCHASE
+                        )
                     }
                 }
             } catch (e: Exception) {
                 Log.e("MonitorService", "Auto purchase error", e)
-                sendLog(route.id, "Авторезерв ИСКЛЮЧЕНИЕ: ${e.message}")
+                sendLog(
+                    routeId = route.id,
+                    message = "Авторезерв ИСКЛЮЧЕНИЕ: ${e.message}",
+                    level = MonitoringLogLevel.ERROR,
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+            } finally {
+                if (activeAutoPurchases[route.id] == this.coroutineContext[Job]) {
+                    activeAutoPurchases.remove(route.id)
+                }
             }
         }
+        activeAutoPurchases[route.id] = job
+    }
+
+    private suspend fun resolveAutoPurchaseRoute(route: MonitoringRoute): ResolvedAutoPurchase? {
+        if (route.passengerProfileName.isNotBlank()) {
+            val profile = passengerProfileRepository.getByName(route.passengerProfileName)
+            if (profile == null) {
+                sendLog(
+                    routeId = route.id,
+                    message = "Авторезерв ОШИБКА: профиль \"${route.passengerProfileName}\" не найден",
+                    level = MonitoringLogLevel.ERROR,
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+                return null
+            }
+
+            val password = PassengerProfilePasswordManager.getPassword(this, profile.name)
+            if (password.isNullOrBlank()) {
+                sendLog(
+                    routeId = route.id,
+                    message = "Авторезерв ОШИБКА: пароль pass.rw.by не найден в профиле \"${profile.name}\"",
+                    level = MonitoringLogLevel.ERROR,
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+                return null
+            }
+
+            return ResolvedAutoPurchase(
+                route = route.copy(
+                    chatId = profile.chatId,
+                    rwLogin = profile.rwLogin,
+                    hasSavedRwPassword = true,
+                    rwPassword = "",
+                    passengerLastName = profile.lastName,
+                    passengerFirstName = profile.firstName,
+                    passengerMiddleName = profile.middleName,
+                    passengerDocumentNumber = profile.documentNumber
+                ),
+                password = password
+            )
+        }
+
+        val password = RwPasswordManager.getPassword(this, route.id)
+        if (password.isNullOrBlank()) {
+            sendLog(
+                routeId = route.id,
+                message = "Авторезерв ОШИБКА: пароль pass.rw.by не найден в защищенном хранилище",
+                level = MonitoringLogLevel.ERROR,
+                category = MonitoringLogCategory.AUTO_PURCHASE
+            )
+            return null
+        }
+
+        return ResolvedAutoPurchase(route, password)
+    }
+
+    private data class ResolvedAutoPurchase(
+        val route: MonitoringRoute,
+        val password: String
+    )
+
+    private fun scheduleAutoPurchaseRenewal(route: MonitoringRoute) {
+        autoPurchaseRenewals[route.id]?.cancel()
+
+        val delayMs = CART_RESERVATION_TIMEOUT_MS + CART_RESERVATION_GRACE_MS
+        val job = serviceScope.launch {
+            try {
+                sendLog(
+                    routeId = route.id,
+                    message = "Повторный авторезерв запланирован через 20 мин 30 сек",
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+                delay(delayMs)
+
+                val currentRoute = getActiveAutoPurchaseRoute(route.id)
+                if (currentRoute == null) {
+                    sendLog(
+                        routeId = route.id,
+                        message = "Повторный авторезерв отменен: маршрут остановлен или авторезерв выключен",
+                        level = MonitoringLogLevel.WARNING,
+                        category = MonitoringLogCategory.AUTO_PURCHASE
+                    )
+                    return@launch
+                }
+
+                sendLog(
+                    routeId = route.id,
+                    message = "Срок брони истек. Пробую зарезервировать билет снова...",
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+                attemptAutoPurchase(currentRoute, isRenewal = true)
+            } finally {
+                if (autoPurchaseRenewals[route.id] == this.coroutineContext[Job]) {
+                    autoPurchaseRenewals.remove(route.id)
+                }
+            }
+        }
+        autoPurchaseRenewals[route.id] = job
+    }
+
+    private fun getActiveAutoPurchaseRoute(routeId: Long): MonitoringRoute? {
+        return MonitoringPreferenceManager.getRoutes(this)
+            .find { route ->
+                route.id == routeId &&
+                    route.isActive &&
+                    route.autoPurchaseEnabled &&
+                    route.trainNumber.isNotEmpty()
+            }
+    }
+
+    private fun cancelAutoPurchaseJobs(routeId: Long) {
+        activeAutoPurchases[routeId]?.cancel()
+        activeAutoPurchases.remove(routeId)
+        autoPurchaseRenewals[routeId]?.cancel()
+        autoPurchaseRenewals.remove(routeId)
     }
 
     private fun sendTelegramMessage(route: MonitoringRoute, message: String) {
@@ -273,18 +499,51 @@ class MonitorService : Service() {
             client.newCall(request).execute()
         } catch (e: Exception) {
             Log.e("MonitorService", "Ошибка отправки в Telegram", e)
+            sendLog(
+                routeId = route.id,
+                message = "Ошибка отправки в Telegram: ${e.message}",
+                level = MonitoringLogLevel.ERROR,
+                category = MonitoringLogCategory.TELEGRAM
+            )
         }
     }
 
-    private fun sendLog(routeId: Long, message: String) {
+    private fun sendLog(
+        routeId: Long,
+        message: String,
+        level: MonitoringLogLevel = MonitoringLogLevel.INFO,
+        category: MonitoringLogCategory = MonitoringLogCategory.MONITORING,
+        important: Boolean = true
+    ) {
+        val timestamp = System.currentTimeMillis()
         val time = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME)
         val logMessage = "$time: $message"
 
         val intent = Intent("LOG_UPDATE").apply {
             putExtra("route_id", routeId)
             putExtra("log_message", logMessage)
+            putExtra("raw_message", message)
+            putExtra("timestamp", timestamp)
+            putExtra("level", level.name)
+            putExtra("category", category.name)
+            putExtra("important", important)
         }
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+
+        if (important) {
+            serviceScope.launch {
+                logRepository.insert(
+                    routeId = routeId,
+                    message = message,
+                    timestamp = timestamp,
+                    level = level,
+                    category = category,
+                    important = true
+                )
+                LocalBroadcastManager.getInstance(this@MonitorService).sendBroadcast(intent)
+            }
+        } else {
+            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        }
     }
 
     private fun updateRouteStatus(routeId: Long, isActive: Boolean) {
@@ -370,5 +629,6 @@ class MonitorService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         stopAllMonitoring()
+        serviceJob.cancel()
     }
 }

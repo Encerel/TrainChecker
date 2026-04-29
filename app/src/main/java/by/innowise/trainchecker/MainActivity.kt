@@ -13,14 +13,17 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import by.innowise.trainchecker.databinding.ActivityMainBinding
+import kotlinx.coroutines.launch
 
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: MonitoringRoutesAdapter
+    private val logRepository by lazy { MonitoringLogRepository(this) }
     private val routes = mutableListOf<MonitoringRoute>()
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -57,6 +60,9 @@ class MainActivity : AppCompatActivity() {
 
         binding.buttonInstructions.setOnClickListener {
             startActivity(Intent(this, InstructionsActivity::class.java))
+        }
+        binding.buttonPassengerProfiles.setOnClickListener {
+            startActivity(Intent(this, PassengerProfilesActivity::class.java))
         }
         binding.buttonAdd.setOnClickListener {
             startActivity(Intent(this, CreateMonitoringActivity::class.java))
@@ -167,8 +173,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun deleteRoute(routeId: Long) {
         stopMonitoring(routeId)
+        RwPasswordManager.deletePassword(this, routeId)
         val updatedRoutes = routes.filter { it.id != routeId }
         MonitoringPreferenceManager.saveRoutes(this, updatedRoutes)
+        lifecycleScope.launch {
+            logRepository.deleteByRouteId(routeId)
+        }
         loadRoutes()
         if (updatedRoutes.none { it.isActive }) {
             val stopIntent = Intent(this, MonitorService::class.java).apply {

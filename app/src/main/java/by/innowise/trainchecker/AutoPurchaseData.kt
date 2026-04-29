@@ -4,6 +4,7 @@ data class AutoPurchaseData(
     val enabled: Boolean = false,
     val trainNumber: String = "",
     val serviceClasses: String? = null,
+    val passengerProfileName: String = "",
     val rwLogin: String = "",
     val rwPassword: String = "",
     val passengerLastName: String = "",

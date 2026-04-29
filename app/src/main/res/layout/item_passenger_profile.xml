@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/spacing_small"
+    app:cardBackgroundColor="@color/card_background"
+    app:cardCornerRadius="@dimen/card_corner_radius"
+    app:cardElevation="@dimen/card_elevation">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/spacing_medium">
+
+        <TextView
+            android:id="@+id/profileName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_size_medium"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/profileDetails"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_tiny"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_size_small" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_small"
+            android:orientation="horizontal"
+            android:weightSum="2">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonEditProfile"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="@dimen/spacing_small"
+                android:layout_weight="1"
+                android:text="Изменить"
+                android:textAllCaps="false"
+                android:textSize="@dimen/text_size_small"
+                app:cornerRadius="@dimen/button_corner_radius"
+                app:strokeColor="@color/primary"
+                app:strokeWidth="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonDeleteProfile"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:layout_weight="1"
+                android:text="Удалить"
+                android:textAllCaps="false"
+                android:textSize="@dimen/text_size_small"
+                app:cornerRadius="@dimen/button_corner_radius"
+                app:strokeColor="@color/error"
+                app:strokeWidth="1dp" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

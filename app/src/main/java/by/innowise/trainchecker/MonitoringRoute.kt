@@ -19,9 +19,12 @@ data class MonitoringRoute(
     val logs: MutableList<String> = mutableListOf(),
     // Поля для авторезерва (опциональные)
     val autoPurchaseEnabled: Boolean = false,
+    val passengerProfileName: String = "",
     val trainNumbers: List<String> = emptyList(),
     val serviceClasses: List<String>? = null,
     val rwLogin: String = "",
+    val hasSavedRwPassword: Boolean = false,
+    @Deprecated("Plain RW passwords are migrated to encrypted storage and must not be persisted.")
     val rwPassword: String = "",
     // Данные пассажира
     val passengerLastName: String = "",

@@ -208,6 +208,25 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="@dimen/spacing_medium"
+                        android:hint="Классы вагонов"
+                        app:boxBackgroundMode="outline"
+                        app:boxCornerRadiusTopStart="8dp"
+                        app:boxCornerRadiusTopEnd="8dp"
+                        app:boxCornerRadiusBottomStart="8dp"
+                        app:boxCornerRadiusBottomEnd="8dp"
+                        app:helperText="Например: 2П, 3Д. Если пусто — 2П">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editServiceClasses"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/spacing_medium"
                         android:hint="Интервал проверки"
                         app:boxBackgroundMode="outline"
                         app:boxCornerRadiusTopStart="8dp"
@@ -292,149 +311,33 @@
                         <com.google.android.material.textfield.TextInputLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginBottom="@dimen/spacing_medium"
-                            android:hint="Классы вагонов"
+                            android:layout_marginBottom="@dimen/spacing_small"
+                            android:hint="Профиль пассажира"
                             app:boxBackgroundMode="outline"
                             app:boxCornerRadiusTopStart="8dp"
                             app:boxCornerRadiusTopEnd="8dp"
                             app:boxCornerRadiusBottomStart="8dp"
                             app:boxCornerRadiusBottomEnd="8dp"
-                            app:helperText="Например: 2П, 3Д. Если пусто — 2П">
+                            app:endIconMode="dropdown_menu">
 
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/editServiceClasses"
+                            <AutoCompleteTextView
+                                android:id="@+id/autoPassengerProfile"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="text" />
+                                android:inputType="none" />
                         </com.google.android.material.textfield.TextInputLayout>
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🔐 Авторизация pass.rw.by"
-                            android:textSize="@dimen/text_size_medium"
-                            android:textStyle="bold"
-                            android:textColor="@color/text_secondary"
-                            android:layout_marginBottom="@dimen/spacing_small" />
-
-                        <com.google.android.material.textfield.TextInputLayout
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/buttonOpenPassengerProfiles"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="@dimen/spacing_medium"
-                            android:hint="Логин/E-mail"
-                            app:boxBackgroundMode="outline"
-                            app:boxCornerRadiusTopStart="8dp"
-                            app:boxCornerRadiusTopEnd="8dp"
-                            app:boxCornerRadiusBottomStart="8dp"
-                            app:boxCornerRadiusBottomEnd="8dp">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/editRwLogin"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textEmailAddress" />
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="@dimen/spacing_medium"
-                            android:hint="Пароль"
-                            app:boxBackgroundMode="outline"
-                            app:boxCornerRadiusTopStart="8dp"
-                            app:boxCornerRadiusTopEnd="8dp"
-                            app:boxCornerRadiusBottomStart="8dp"
-                            app:boxCornerRadiusBottomEnd="8dp"
-                            app:endIconMode="password_toggle">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/editRwPassword"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textPassword" />
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="👤 Данные пассажира"
-                            android:textSize="@dimen/text_size_medium"
-                            android:textStyle="bold"
-                            android:textColor="@color/text_secondary"
-                            android:layout_marginBottom="@dimen/spacing_small" />
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="@dimen/spacing_medium"
-                            android:hint="Фамилия"
-                            app:boxBackgroundMode="outline"
-                            app:boxCornerRadiusTopStart="8dp"
-                            app:boxCornerRadiusTopEnd="8dp"
-                            app:boxCornerRadiusBottomStart="8dp"
-                            app:boxCornerRadiusBottomEnd="8dp">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/editPassengerLastName"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textPersonName" />
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="@dimen/spacing_medium"
-                            android:hint="Имя"
-                            app:boxBackgroundMode="outline"
-                            app:boxCornerRadiusTopStart="8dp"
-                            app:boxCornerRadiusTopEnd="8dp"
-                            app:boxCornerRadiusBottomStart="8dp"
-                            app:boxCornerRadiusBottomEnd="8dp">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/editPassengerFirstName"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textPersonName" />
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="@dimen/spacing_medium"
-                            android:hint="Отчество"
-                            app:boxBackgroundMode="outline"
-                            app:boxCornerRadiusTopStart="8dp"
-                            app:boxCornerRadiusTopEnd="8dp"
-                            app:boxCornerRadiusBottomStart="8dp"
-                            app:boxCornerRadiusBottomEnd="8dp"
-                            app:helperText="Обязательно при наличии">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/editPassengerMiddleName"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textPersonName" />
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="Номер документа"
-                            app:boxBackgroundMode="outline"
-                            app:boxCornerRadiusTopStart="8dp"
-                            app:boxCornerRadiusTopEnd="8dp"
-                            app:boxCornerRadiusBottomStart="8dp"
-                            app:boxCornerRadiusBottomEnd="8dp"
-                            app:helperText="Паспорт гражданина РБ">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/editPassengerDocument"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="text" />
-                        </com.google.android.material.textfield.TextInputLayout>
+                            android:layout_height="40dp"
+                            android:text="Управлять профилями"
+                            android:textAllCaps="false"
+                            android:textSize="@dimen/text_size_small"
+                            app:cornerRadius="@dimen/button_corner_radius"
+                            app:strokeColor="@color/primary"
+                            app:strokeWidth="1dp" />
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

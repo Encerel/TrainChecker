@@ -13,7 +13,7 @@ object MonitoringPreferenceManager {
     private val gson = Gson()
 
     fun saveRoutes(context: Context, routes: List<MonitoringRoute>) {
-        val json = gson.toJson(routes)
+        val json = gson.toJson(sanitizeRoutesForSave(context, routes))
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(ROUTES_KEY, json)
@@ -25,8 +25,41 @@ object MonitoringPreferenceManager {
             .getString(ROUTES_KEY, null) ?: return emptyList()
 
         val type = object : TypeToken<List<MonitoringRoute>>() {}.type
-        return gson.fromJson(json, type) ?: emptyList()
+        val routes = gson.fromJson<List<MonitoringRoute>>(json, type) ?: emptyList()
+        val sanitizedRoutes = sanitizeRoutesForSave(context, routes)
+        if (sanitizedRoutes != routes) {
+            saveRoutes(context, sanitizedRoutes)
+        }
+        return sanitizedRoutes
     }
+
+    private fun sanitizeRoutesForSave(
+        context: Context,
+        routes: List<MonitoringRoute>
+    ): List<MonitoringRoute> {
+        return routes.map { route ->
+            var sanitizedRoute = route
+            val legacyPassword = route.legacyRwPassword
+
+            if (legacyPassword.isNotBlank()) {
+                RwPasswordManager.savePassword(context, route.id, legacyPassword)
+                sanitizedRoute = sanitizedRoute.copy(rwPassword = "")
+            }
+
+            val hasEncryptedPassword = RwPasswordManager.hasPassword(context, route.id)
+            if (sanitizedRoute.hasSavedRwPassword != hasEncryptedPassword) {
+                sanitizedRoute = sanitizedRoute.copy(
+                    hasSavedRwPassword = hasEncryptedPassword
+                )
+            }
+
+            sanitizedRoute
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private val MonitoringRoute.legacyRwPassword: String
+        get() = rwPassword
 
     fun saveDefaultToken(context: Context, token: String) {
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -84,7 +117,7 @@ object MonitoringPreferenceManager {
     private const val RW_LOGIN_KEY = "default_rw_login"
 
     fun saveDefaultPassengerData(context: Context, data: AutoPurchaseData) {
-        val json = gson.toJson(data)
+        val json = gson.toJson(data.copy(rwPassword = ""))
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(PASSENGER_DATA_KEY, json)

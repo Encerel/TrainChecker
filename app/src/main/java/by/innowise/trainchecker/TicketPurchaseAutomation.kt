@@ -17,7 +17,8 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class TicketPurchaseAutomation(
-    private val route: MonitoringRoute
+    private val route: MonitoringRoute,
+    private val rwPassword: String
 ) {
     companion object {
         private const val TAG = "TicketPurchase"
@@ -364,7 +365,7 @@ class TicketPurchaseAutomation(
         val passwordInputName = loginForm.selectFirst("input[type=password]")?.attr("name") ?: "password"
         
         formBodyBuilder.add(loginInputName, route.rwLogin)
-        formBodyBuilder.add(passwordInputName, route.rwPassword)
+        formBodyBuilder.add(passwordInputName, rwPassword)
         
         val submitButton = loginForm.selectFirst("input[type=submit], button[type=submit]")
         if (submitButton != null) {
@@ -497,7 +498,7 @@ class TicketPurchaseAutomation(
         
         val formBody = FormBody.Builder()
             .add("login", route.rwLogin)
-            .add("password", route.rwPassword)
+            .add("password", rwPassword)
             .add("dologin", "Войти")
             .build()
             
@@ -1392,7 +1393,7 @@ class TicketPurchaseAutomation(
 
         val formBody = FormBody.Builder()
             .add("login", route.rwLogin)
-            .add("password", route.rwPassword)
+            .add("password", rwPassword)
             .add("dologin", "Войти")
             .build()
 
