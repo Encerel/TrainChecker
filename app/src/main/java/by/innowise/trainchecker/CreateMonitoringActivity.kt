@@ -152,6 +152,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         binding.switchAutoPurchase.isChecked = route.autoPurchaseEnabled
         binding.autoPurchaseFields.visibility = if (route.autoPurchaseEnabled) View.VISIBLE else View.GONE
         binding.switchDryRun.isChecked = route.autoPurchaseDryRun
+        binding.switchWebViewDebugLogs.isChecked = route.webViewDebugLogsEnabled
         binding.editServiceClasses.setText(route.serviceClassesFormatted)
         binding.autoPassengerProfile.setText(route.passengerProfileName, false)
     }
@@ -291,6 +292,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
             autoPurchaseDryRun = autoPurchaseData.dryRun,
+            webViewDebugLogsEnabled = binding.switchWebViewDebugLogs.isChecked,
             passengerProfileName = autoPurchaseData.passengerProfileName,
             trainNumbers = trainNumbers,
             serviceClasses = serviceClasses,
@@ -380,6 +382,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
             autoPurchaseDryRun = autoPurchaseData.dryRun,
+            webViewDebugLogsEnabled = binding.switchWebViewDebugLogs.isChecked,
             passengerProfileName = autoPurchaseData.passengerProfileName,
             trainNumbers = trainNumbers,
             serviceClasses = serviceClasses,

@@ -39,7 +39,8 @@ class MonitoringLogRepository(context: Context) {
             since = System.currentTimeMillis() - RETENTION_MS,
             query = query.trim(),
             levels = levels.map { it.name },
-            categories = categories.map { it.name }
+            categories = categories.map { it.name },
+            limit = MAX_LOGS_PER_ROUTE
         )
     }
 
@@ -53,5 +54,6 @@ class MonitoringLogRepository(context: Context) {
 
     companion object {
         const val RETENTION_MS = 24 * 60 * 60 * 1000L
+        const val MAX_LOGS_PER_ROUTE = 400
     }
 }

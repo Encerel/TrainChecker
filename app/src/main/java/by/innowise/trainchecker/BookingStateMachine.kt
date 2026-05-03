@@ -90,7 +90,7 @@ class BookingStateMachine(
     }
 
     private fun loadRoute() {
-        logger.log("WEBVIEW LOAD_ROUTE url=${request.routeUrl}")
+        logger.technical("WEBVIEW LOAD_ROUTE url=${request.routeUrl}", state.name, "load_route")
         webView.loadUrl(request.routeUrl)
         enter(BookingState.WAIT_ROUTE, "Route URL loaded")
     }
@@ -195,7 +195,11 @@ class BookingStateMachine(
     private fun reselectAfterLogin() {
         val ageMs = System.currentTimeMillis() - stateStartedAt
         if (ageMs < 3_000L) {
-            logger.log("WAIT[$state] ageMs=$ageMs message=Waiting for login redirect url=${webView.url.orEmpty()}")
+            logger.technical(
+                message = "WAIT[$state] ageMs=$ageMs message=Waiting for login redirect url=${webView.url.orEmpty()}",
+                state = state.name,
+                action = "wait_login_redirect"
+            )
             keepWaiting("Waiting for login redirect")
             return
         }
@@ -297,9 +301,11 @@ class BookingStateMachine(
             ?.toString()
             ?.take(LOG_MESSAGE_VALUE_LIMIT)
             .orEmpty()
-        logger.log(
-            "SCROLL_REQUEST[$state] action=$action actionTaken=$actionTaken " +
-                "webViewScrollY=${webView.scrollY} jsLastScroll=$lastScroll"
+        logger.technical(
+            message = "SCROLL_REQUEST[$state] action=$action actionTaken=$actionTaken " +
+                "webViewScrollY=${webView.scrollY} jsLastScroll=$lastScroll",
+            state = state.name,
+            action = action
         )
     }
 
@@ -315,7 +321,11 @@ class BookingStateMachine(
     }
 
     private fun keepWaiting(message: String) {
-        logger.log("WAIT[$state] message=${message.take(LOG_MESSAGE_VALUE_LIMIT)} url=${webView.url.orEmpty()}")
+        logger.technical(
+            message = "WAIT[$state] message=${message.take(LOG_MESSAGE_VALUE_LIMIT)} url=${webView.url.orEmpty()}",
+            state = state.name,
+            action = "wait"
+        )
         onStateChanged(state, message)
         schedule()
     }
@@ -386,7 +396,11 @@ class BookingStateMachine(
         stateStartedAt = System.currentTimeMillis()
         waitingForJs = false
         onStateChanged(newState, reason)
-        logger.log("STATE[$newState] reason=${reason.take(LOG_MESSAGE_VALUE_LIMIT)} url=${webView.url.orEmpty()}")
+        logger.technical(
+            message = "STATE[$newState] reason=${reason.take(LOG_MESSAGE_VALUE_LIMIT)} url=${webView.url.orEmpty()}",
+            state = newState.name,
+            action = "state"
+        )
         schedule(250L)
     }
 
@@ -429,7 +443,11 @@ class BookingStateMachine(
             append("] ")
             append(sanitizeForLog(result.toString()).take(LOG_ENTRY_VALUE_LIMIT))
         }
-        logger.log(message)
+        logger.technical(
+            message = message,
+            state = state.name,
+            action = action
+        )
     }
 
     private fun sanitizeForLog(value: String): String {

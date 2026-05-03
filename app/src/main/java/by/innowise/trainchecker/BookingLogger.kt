@@ -13,11 +13,21 @@ import java.time.format.DateTimeFormatter
 
 class BookingLogger(
     context: Context,
-    private val routeId: Long
+    private val routeId: Long,
+    private val webViewDebugLogsEnabled: Boolean = false
 ) {
     private val appContext = context.applicationContext
     private val repository = MonitoringLogRepository(appContext)
+    private val webViewTechnicalLogRepository = WebViewTechnicalLogRepository(appContext)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    init {
+        if (webViewDebugLogsEnabled) {
+            scope.launch {
+                webViewTechnicalLogRepository.deleteExpired()
+            }
+        }
+    }
 
     fun log(
         message: String,
@@ -48,6 +58,25 @@ class BookingLogger(
                 )
             }
             LocalBroadcastManager.getInstance(appContext).sendBroadcast(intent)
+        }
+    }
+
+    fun technical(
+        message: String,
+        state: String = "",
+        action: String = ""
+    ) {
+        if (!webViewDebugLogsEnabled) return
+
+        val timestamp = System.currentTimeMillis()
+        scope.launch {
+            webViewTechnicalLogRepository.insert(
+                routeId = routeId,
+                message = message,
+                timestamp = timestamp,
+                state = state,
+                action = action
+            )
         }
     }
 

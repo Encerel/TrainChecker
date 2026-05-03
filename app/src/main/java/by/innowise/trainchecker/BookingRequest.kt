@@ -18,7 +18,8 @@ data class BookingRequest(
     val telegramToken: String,
     val chatId: String,
     val isRenewal: Boolean = false,
-    val dryRun: Boolean = false
+    val dryRun: Boolean = false,
+    val webViewDebugLogsEnabled: Boolean = false
 ) {
     val primaryTrainNumber: String
         get() = trainNumbers.firstOrNull().orEmpty()
@@ -40,6 +41,7 @@ data class BookingRequest(
             .putExtra(EXTRA_CHAT_ID, chatId)
             .putExtra(EXTRA_IS_RENEWAL, isRenewal)
             .putExtra(EXTRA_DRY_RUN, dryRun)
+            .putExtra(EXTRA_WEBVIEW_DEBUG_LOGS_ENABLED, webViewDebugLogsEnabled)
     }
 
     companion object {
@@ -58,6 +60,7 @@ data class BookingRequest(
         private const val EXTRA_CHAT_ID = "booking_chat_id"
         private const val EXTRA_IS_RENEWAL = "booking_is_renewal"
         private const val EXTRA_DRY_RUN = "booking_dry_run"
+        private const val EXTRA_WEBVIEW_DEBUG_LOGS_ENABLED = "booking_webview_debug_logs_enabled"
 
         fun from(route: MonitoringRoute, rwPassword: String, isRenewal: Boolean = false): BookingRequest {
             return BookingRequest(
@@ -75,7 +78,8 @@ data class BookingRequest(
                 telegramToken = route.telegramToken,
                 chatId = route.chatId,
                 isRenewal = isRenewal,
-                dryRun = route.autoPurchaseDryRun
+                dryRun = route.autoPurchaseDryRun,
+                webViewDebugLogsEnabled = route.webViewDebugLogsEnabled
             )
         }
 
@@ -100,7 +104,11 @@ data class BookingRequest(
                 telegramToken = intent.getStringExtra(EXTRA_TELEGRAM_TOKEN).orEmpty(),
                 chatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty(),
                 isRenewal = intent.getBooleanExtra(EXTRA_IS_RENEWAL, false),
-                dryRun = intent.getBooleanExtra(EXTRA_DRY_RUN, false)
+                dryRun = intent.getBooleanExtra(EXTRA_DRY_RUN, false),
+                webViewDebugLogsEnabled = intent.getBooleanExtra(
+                    EXTRA_WEBVIEW_DEBUG_LOGS_ENABLED,
+                    false
+                )
             )
         }
     }

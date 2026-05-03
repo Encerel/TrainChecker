@@ -20,6 +20,7 @@ data class MonitoringRoute(
     // Поля для авторезерва (опциональные)
     val autoPurchaseEnabled: Boolean = false,
     val autoPurchaseDryRun: Boolean = false,
+    val webViewDebugLogsEnabled: Boolean = false,
     val passengerProfileName: String = "",
     val trainNumbers: List<String> = emptyList(),
     val serviceClasses: List<String>? = null,

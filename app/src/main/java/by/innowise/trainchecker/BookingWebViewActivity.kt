@@ -52,7 +52,11 @@ class BookingWebViewActivity : AppCompatActivity() {
             return
         }
         request = parsedRequest
-        logger = BookingLogger(this, request.routeId)
+        logger = BookingLogger(
+            context = this,
+            routeId = request.routeId,
+            webViewDebugLogsEnabled = request.webViewDebugLogsEnabled
+        )
 
         binding = ActivityBookingWebviewBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -161,7 +165,11 @@ class BookingWebViewActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 binding.detailsText.text = url.orEmpty()
                 binding.progressBar.isIndeterminate = true
-                logger.log("WEBVIEW PAGE_STARTED url=${url.orEmpty()}")
+                logger.technical(
+                    message = "WEBVIEW PAGE_STARTED url=${url.orEmpty()}",
+                    state = lastState.name,
+                    action = "page_started"
+                )
                 super.onPageStarted(view, url, favicon)
             }
 
@@ -169,7 +177,11 @@ class BookingWebViewActivity : AppCompatActivity() {
                 binding.detailsText.text = url.orEmpty()
                 binding.progressBar.isIndeterminate = false
                 binding.progressBar.progress = 100
-                logger.log("WEBVIEW PAGE_FINISHED url=${url.orEmpty()} title=${view?.title.orEmpty()}")
+                logger.technical(
+                    message = "WEBVIEW PAGE_FINISHED url=${url.orEmpty()} title=${view?.title.orEmpty()}",
+                    state = lastState.name,
+                    action = "page_finished"
+                )
                 stateMachine?.onPageFinished()
                 super.onPageFinished(view, url)
             }

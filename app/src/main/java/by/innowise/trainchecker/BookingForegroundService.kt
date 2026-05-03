@@ -105,7 +105,11 @@ class BookingForegroundService : Service() {
             return
         }
 
-        val logger = BookingLogger(this, request.routeId)
+        val logger = BookingLogger(
+            context = this,
+            routeId = request.routeId,
+            webViewDebugLogsEnabled = request.webViewDebugLogsEnabled
+        )
         val wakeLock = acquireWakeLock(request, logger)
         val session = BookingSession(
             request = request,

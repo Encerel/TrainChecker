@@ -29,6 +29,7 @@ class RouteDetailsActivity : AppCompatActivity() {
     private lateinit var binding: ActivityRouteDetailsBinding
     private lateinit var route: MonitoringRoute
     private lateinit var logRepository: MonitoringLogRepository
+    private lateinit var webViewTechnicalLogRepository: WebViewTechnicalLogRepository
     private var savedLogEntries: List<MonitoringLogEntry> = emptyList()
     private var fallbackLogLines: List<String> = emptyList()
     private val liveLogEntries = mutableListOf<MonitoringLogEntry>()
@@ -82,6 +83,7 @@ class RouteDetailsActivity : AppCompatActivity() {
         binding = ActivityRouteDetailsBinding.inflate(layoutInflater)
         setContentView(binding.root)
         logRepository = MonitoringLogRepository(this)
+        webViewTechnicalLogRepository = WebViewTechnicalLogRepository(this)
 
         val routeId = intent.getLongExtra("route_id", -1)
         route = MonitoringPreferenceManager.getRoutes(this)
@@ -104,7 +106,8 @@ class RouteDetailsActivity : AppCompatActivity() {
 
         val autoPurchaseInfo = if (route.autoPurchaseEnabled) {
             val trains = route.trainNumbersFormatted.ifBlank { route.trainNumber }
-            val dryRun = if (route.autoPurchaseDryRun) ", dry-run" else ""
+            var dryRun = if (route.autoPurchaseDryRun) ", dry-run" else ""
+            dryRun += if (route.webViewDebugLogsEnabled) ", WebView debug logs" else ""
             "\n🛒 Авторезерв: ВКЛ (поезда $trains, классы ${route.serviceClassesFormatted}$dryRun)"
         } else {
             "\n🛒 Авторезерв: ВЫКЛ"
@@ -391,6 +394,7 @@ class RouteDetailsActivity : AppCompatActivity() {
         MonitoringPreferenceManager.saveRoutes(this, routes)
         lifecycleScope.launch {
             logRepository.deleteByRouteId(route.id)
+            webViewTechnicalLogRepository.deleteByRouteId(route.id)
         }
 
         finish()

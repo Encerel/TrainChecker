@@ -19,6 +19,7 @@ interface MonitoringLogDao {
           AND level IN (:levels)
           AND category IN (:categories)
         ORDER BY timestamp DESC
+        LIMIT :limit
         """
     )
     suspend fun getRecentLogs(
@@ -26,7 +27,8 @@ interface MonitoringLogDao {
         since: Long,
         query: String,
         levels: List<String>,
-        categories: List<String>
+        categories: List<String>,
+        limit: Int
     ): List<MonitoringLogEntry>
 
     @Query("DELETE FROM monitoring_logs WHERE timestamp < :before")
