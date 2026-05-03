@@ -595,7 +595,7 @@ class BookingStateMachine(
             var href = buttonHref(button);
             var scrollTarget = button || form;
             if (!button) {
-                var formScroll = scrollElementIntoActionView(form);
+                var formScroll = scrollPassengerTransitionStep(form);
                 return status({
                     ok: false,
                     actionTaken: "scroll_to_passenger_transition_form",
@@ -606,7 +606,7 @@ class BookingStateMachine(
                 });
             }
             if (!isVisible(button) || !isInViewport(button)) {
-                var buttonScroll = scrollElementIntoActionView(scrollTarget);
+                var buttonScroll = scrollPassengerTransitionStep(scrollTarget);
                 return status({
                     ok: false,
                     actionTaken: "scroll_to_passenger_transition_button",
@@ -905,6 +905,49 @@ class BookingStateMachine(
                 }
                 return delta;
             }
+            function scrollPassengerTransitionStep(element) {
+                var target = element || document.querySelector("form.carriage-cost__form a.btn-index-2, form.carriage-cost__form");
+                var before = getScrollSnapshot();
+                var scroller = document.scrollingElement || document.documentElement || document.body;
+                var targetRectBefore = rectSummary(target);
+                var targetVisibleBefore = isInViewport(target);
+                var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 700;
+                var delta = 330;
+                var reason = "passenger_transition_step_down";
+                var rect = target && target.getBoundingClientRect ? target.getBoundingClientRect() : null;
+                if (rect && rect.bottom < 80) {
+                    delta = -330;
+                    reason = "passenger_transition_step_up";
+                } else if (rect && rect.top < viewportHeight - 80 && rect.bottom > 80 && targetVisibleBefore) {
+                    delta = 0;
+                    reason = "passenger_transition_already_visible";
+                }
+                var appliedDelta = 0;
+                if (scroller) {
+                    var currentTop = scroller.scrollTop || 0;
+                    var maxTop = Math.max(0, scroller.scrollHeight - viewportHeight);
+                    var nextTop = Math.min(Math.max(currentTop + delta, 0), maxTop);
+                    appliedDelta = nextTop - currentTop;
+                    window.scrollTo(0, nextTop);
+                    scroller.scrollTop = nextTop;
+                }
+                window.dispatchEvent(new Event("scroll", { bubbles: true }));
+                document.dispatchEvent(new Event("scroll", { bubbles: true }));
+                window.__trainCheckerLastScroll = {
+                    before: before,
+                    after: getScrollSnapshot(),
+                    target: describeElement(target),
+                    targetRectBefore: targetRectBefore,
+                    targetRectAfter: rectSummary(target),
+                    requestedDelta: Math.round(appliedDelta),
+                    appliedDelta: Math.round(appliedDelta),
+                    reason: reason,
+                    targetVisibleBefore: targetVisibleBefore,
+                    targetVisibleAfter: isInViewport(target),
+                    visibleCarriages: visibleCarriagesSummary()
+                };
+                return window.__trainCheckerLastScroll;
+            }
             function scrollElementIntoActionView(element) {
                 if (!element) return null;
                 var target = element;
@@ -931,10 +974,7 @@ class BookingStateMachine(
                             requestedDelta = rect.top - safeTop;
                         }
                         var direction = requestedDelta >= 0 ? 1 : -1;
-                        var maxStep = Math.min(170, Math.max(105, Math.floor(viewportHeight * 0.2)));
-                        var minStep = 55;
-                        var step = Math.min(Math.max(Math.abs(requestedDelta) * 0.35, minStep), maxStep);
-                        appliedDelta = direction * Math.round(step);
+                        appliedDelta = direction * 330;
                         reason = appliedDelta > 0 ? "target_below" : "target_above";
                         applyMediumScroll(nearestScrollableParent(target), appliedDelta);
                     }

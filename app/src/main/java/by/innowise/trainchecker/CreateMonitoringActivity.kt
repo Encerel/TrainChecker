@@ -126,6 +126,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
     private fun loadDefaultPassengerData() {
         MonitoringPreferenceManager.getDefaultPassengerData(this)?.let { data ->
             binding.editServiceClasses.setText(data.serviceClassesInput)
+            binding.switchDryRun.isChecked = data.dryRun
         } ?: binding.editServiceClasses.setText(MonitoringRoute.DEFAULT_SERVICE_CLASS)
         if (binding.editServiceClasses.text.isNullOrBlank()) {
             binding.editServiceClasses.setText(MonitoringRoute.DEFAULT_SERVICE_CLASS)
@@ -150,6 +151,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         // Загрузка данных авторезерва
         binding.switchAutoPurchase.isChecked = route.autoPurchaseEnabled
         binding.autoPurchaseFields.visibility = if (route.autoPurchaseEnabled) View.VISIBLE else View.GONE
+        binding.switchDryRun.isChecked = route.autoPurchaseDryRun
         binding.editServiceClasses.setText(route.serviceClassesFormatted)
         binding.autoPassengerProfile.setText(route.passengerProfileName, false)
     }
@@ -223,6 +225,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
         val selectedProfile = getSelectedPassengerProfile()
         return AutoPurchaseData(
             enabled = binding.switchAutoPurchase.isChecked,
+            dryRun = binding.switchDryRun.isChecked,
             trainNumber = binding.editTrainNumber.text.toString().trim(),
             serviceClasses = binding.editServiceClasses.text.toString().trim(),
             passengerProfileName = selectedProfile?.name.orEmpty(),
@@ -287,6 +290,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
             checkIntervalSec = checkInterval,
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
+            autoPurchaseDryRun = autoPurchaseData.dryRun,
             passengerProfileName = autoPurchaseData.passengerProfileName,
             trainNumbers = trainNumbers,
             serviceClasses = serviceClasses,
@@ -375,6 +379,7 @@ class CreateMonitoringActivity : AppCompatActivity() {
             checkIntervalSec = checkInterval,
             healthIntervalMin = healthInterval,
             autoPurchaseEnabled = autoPurchaseData.enabled,
+            autoPurchaseDryRun = autoPurchaseData.dryRun,
             passengerProfileName = autoPurchaseData.passengerProfileName,
             trainNumbers = trainNumbers,
             serviceClasses = serviceClasses,

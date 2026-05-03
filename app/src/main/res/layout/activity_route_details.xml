@@ -490,6 +490,19 @@
                             android:fontFamily="monospace"
                             android:lineSpacingExtra="2dp" />
                     </androidx.core.widget.NestedScrollView>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/buttonCopyLogs"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="@dimen/spacing_small"
+                        android:text="Copy visible logs"
+                        android:textAllCaps="false"
+                        android:textSize="@dimen/text_size_small"
+                        app:cornerRadius="@dimen/button_corner_radius"
+                        app:strokeColor="@color/primary"
+                        app:strokeWidth="1dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>

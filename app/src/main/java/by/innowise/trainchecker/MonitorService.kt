@@ -289,6 +289,9 @@ class MonitorService : Service() {
     private fun stopAllMonitoring() {
         activeMonitors.values.forEach { it.cancel() }
         activeMonitors.clear()
+        activeAutoPurchases.keys.toList().forEach { routeId ->
+            cancelBookingForeground(routeId, "Monitoring stopped")
+        }
         activeAutoPurchases.values.forEach { it.cancel() }
         activeAutoPurchases.clear()
         autoPurchaseRenewals.values.forEach { it.cancel() }
@@ -342,7 +345,7 @@ class MonitorService : Service() {
                 )
                 sendLog(
                     routeId = route.id,
-                    message = "WebView-сценарий бронирования запущен. Ожидаю результат от Activity.",
+                    message = "Foreground WebView-сценарий бронирования запущен. Ожидаю результат.",
                     category = MonitoringLogCategory.AUTO_PURCHASE
                 )
 
@@ -575,6 +578,7 @@ class MonitorService : Service() {
         if (routeId == -1L) return
 
         val success = intent.getBooleanExtra(BookingWebViewActivity.EXTRA_SUCCESS, false)
+        val dryRun = intent.getBooleanExtra(BookingWebViewActivity.EXTRA_DRY_RUN, false)
         val message = intent.getStringExtra(BookingWebViewActivity.EXTRA_MESSAGE).orEmpty()
         val state = intent.getStringExtra(BookingWebViewActivity.EXTRA_STATE).orEmpty()
 
@@ -588,7 +592,7 @@ class MonitorService : Service() {
                 level = MonitoringLogLevel.SUCCESS,
                 category = MonitoringLogCategory.AUTO_PURCHASE
             )
-            getActiveAutoPurchaseRoute(routeId)?.let { currentRoute ->
+            if (!dryRun) getActiveAutoPurchaseRoute(routeId)?.let { currentRoute ->
                 scheduleAutoPurchaseRenewal(currentRoute)
             }
         } else {
@@ -602,10 +606,20 @@ class MonitorService : Service() {
     }
 
     private fun cancelAutoPurchaseJobs(routeId: Long) {
+        cancelBookingForeground(routeId, "Monitoring stopped or route changed")
         activeAutoPurchases[routeId]?.cancel()
         activeAutoPurchases.remove(routeId)
         autoPurchaseRenewals[routeId]?.cancel()
         autoPurchaseRenewals.remove(routeId)
+    }
+
+    private fun cancelBookingForeground(routeId: Long, reason: String) {
+        val intent = BookingForegroundService.createCancelIntent(this, routeId, reason)
+        try {
+            startService(intent)
+        } catch (e: Exception) {
+            Log.w("MonitorService", "Unable to cancel foreground booking service", e)
+        }
     }
 
     private fun sendTelegramMessage(route: MonitoringRoute, message: String) {

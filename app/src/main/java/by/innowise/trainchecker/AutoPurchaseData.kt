@@ -2,6 +2,7 @@ package by.innowise.trainchecker
 
 data class AutoPurchaseData(
     val enabled: Boolean = false,
+    val dryRun: Boolean = false,
     val trainNumber: String = "",
     val serviceClasses: String? = null,
     val passengerProfileName: String = "",

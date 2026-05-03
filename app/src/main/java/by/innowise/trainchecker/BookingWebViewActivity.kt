@@ -1,12 +1,13 @@
 package by.innowise.trainchecker
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
 import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -18,18 +19,29 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import by.innowise.trainchecker.databinding.ActivityBookingWebviewBinding
-import kotlinx.coroutines.launch
 
 class BookingWebViewActivity : AppCompatActivity() {
     private lateinit var binding: ActivityBookingWebviewBinding
     private lateinit var request: BookingRequest
     private lateinit var logger: BookingLogger
     private var stateMachine: BookingStateMachine? = null
-    private var wakeLock: PowerManager.WakeLock? = null
     private var resultBroadcastSent = false
+    private var lastState: BookingState = BookingState.LOAD_ROUTE
+    private val cancelReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_CANCEL_BOOKING) return
+            val routeId = intent.getLongExtra(EXTRA_ROUTE_ID, -1L)
+            if (routeId != request.routeId) return
+
+            val message = intent.getStringExtra(EXTRA_MESSAGE) ?: "Booking cancelled by service"
+            logger.log(message, MonitoringLogLevel.WARNING)
+            resultBroadcastSent = true
+            stateMachine?.stop()
+            finish()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,13 +58,13 @@ class BookingWebViewActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupLockScreenWindow()
-        acquireWakeLock()
+        setupCancelReceiver()
         setupBackHandling()
+        setupManualStop()
         setupWebView()
         updateHeader(BookingState.LOAD_ROUTE, "Starting")
 
         logger.log("WebView booking started for route ${request.routeName} train ${request.primaryTrainNumber}")
-        sendTelegram("TrainChecker: WebView booking started for ${request.routeName}. Train: ${request.primaryTrainNumber}")
 
         stateMachine = BookingStateMachine(
             webView = binding.bookingWebView,
@@ -72,14 +84,16 @@ class BookingWebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        if (!resultBroadcastSent && isFinishing) {
+        if (::logger.isInitialized && !resultBroadcastSent && isFinishing) {
             val message = "Booking activity was closed before completion"
             logger.log(message, MonitoringLogLevel.WARNING)
             broadcastResult(false, message, BookingState.ERROR)
         }
         stateMachine?.stop()
-        releaseWakeLock()
-        logger.close()
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(cancelReceiver)
+        if (::logger.isInitialized) {
+            logger.close()
+        }
         super.onDestroy()
     }
 
@@ -91,20 +105,11 @@ class BookingWebViewActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
-    private fun acquireWakeLock() {
-        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "$packageName:BookingWebView"
-        ).apply {
-            setReferenceCounted(false)
-            acquire(WAKE_LOCK_TIMEOUT_MS)
-        }
-    }
-
-    private fun releaseWakeLock() {
-        wakeLock?.takeIf { it.isHeld }?.release()
-        wakeLock = null
+    private fun setupCancelReceiver() {
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            cancelReceiver,
+            IntentFilter(ACTION_CANCEL_BOOKING)
+        )
     }
 
     private fun setupBackHandling() {
@@ -117,6 +122,18 @@ class BookingWebViewActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    private fun setupManualStop() {
+        binding.buttonStopBooking.setOnClickListener {
+            val message = "Booking cancelled manually"
+            logger.log(message, MonitoringLogLevel.WARNING)
+            resultBroadcastSent = true
+            stateMachine?.stop()
+            updateHeader(BookingState.ERROR, message)
+            broadcastResult(false, message, BookingState.ERROR)
+            finish()
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -188,37 +205,37 @@ class BookingWebViewActivity : AppCompatActivity() {
     }
 
     private fun updateHeader(state: BookingState, message: String) {
+        lastState = state
         binding.titleText.text = "Booking: ${state.name}"
         binding.stateText.text = message
         binding.detailsText.text = binding.bookingWebView.url ?: request.routeUrl
+        broadcastStatus(state, message)
     }
 
     private fun onVerificationDetected() {
-        sendTelegram("TrainChecker: Verification page detected for ${request.routeName}. WebView is waiting.")
+        broadcastStatus(lastState, "Verification page detected")
     }
 
     private fun onBookingDone(message: String) {
         resultBroadcastSent = true
-        sendTelegram(
-            "TrainChecker: WebView booking finished for ${request.routeName}.\n" +
-                "$message\nCheck cart/payment on pass.rw.by."
-        )
         broadcastResult(true, message, BookingState.DONE)
     }
 
     private fun onBookingError(state: BookingState, message: String) {
         resultBroadcastSent = true
-        sendTelegram("TrainChecker: WebView booking failed for ${request.routeName} at $state.\n$message")
         broadcastResult(false, message, state)
     }
 
-    private fun sendTelegram(message: String) {
-        lifecycleScope.launch {
-            val sent = TelegramNotifier.send(request.telegramToken, request.chatId, message)
-            if (!sent) {
-                logger.log("Telegram status notification was not sent", MonitoringLogLevel.WARNING)
-            }
+    private fun broadcastStatus(state: BookingState, message: String) {
+        val intent = Intent(ACTION_BOOKING_STATUS).apply {
+            putExtra(EXTRA_ROUTE_ID, request.routeId)
+            putExtra(EXTRA_MESSAGE, message)
+            putExtra(EXTRA_STATE, state.name)
+            putExtra(EXTRA_URL, binding.bookingWebView.url ?: request.routeUrl)
+            putExtra(EXTRA_IS_RENEWAL, request.isRenewal)
+            putExtra(EXTRA_DRY_RUN, request.dryRun)
         }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
     private fun broadcastResult(success: Boolean, message: String, state: BookingState) {
@@ -229,6 +246,7 @@ class BookingWebViewActivity : AppCompatActivity() {
             putExtra(EXTRA_MESSAGE, message)
             putExtra(EXTRA_STATE, state.name)
             putExtra(EXTRA_IS_RENEWAL, request.isRenewal)
+            putExtra(EXTRA_DRY_RUN, request.dryRun)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
@@ -240,7 +258,10 @@ class BookingWebViewActivity : AppCompatActivity() {
         const val EXTRA_MESSAGE = "message"
         const val EXTRA_STATE = "state"
         const val EXTRA_IS_RENEWAL = "is_renewal"
-        private const val WAKE_LOCK_TIMEOUT_MS = 15 * 60 * 1000L
+        const val EXTRA_URL = "url"
+        const val EXTRA_DRY_RUN = "dry_run"
+        const val ACTION_BOOKING_STATUS = "by.innowise.trainchecker.ACTION_BOOKING_STATUS"
+        const val ACTION_CANCEL_BOOKING = "by.innowise.trainchecker.ACTION_CANCEL_BOOKING"
 
         fun createIntent(context: Context, request: BookingRequest): Intent {
             return request.putInto(Intent(context, BookingWebViewActivity::class.java))

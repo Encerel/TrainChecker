@@ -2,6 +2,8 @@ package by.innowise.trainchecker
 
 import android.Manifest
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -102,7 +104,8 @@ class RouteDetailsActivity : AppCompatActivity() {
 
         val autoPurchaseInfo = if (route.autoPurchaseEnabled) {
             val trains = route.trainNumbersFormatted.ifBlank { route.trainNumber }
-            "\n🛒 Авторезерв: ВКЛ (поезда $trains, классы ${route.serviceClassesFormatted})"
+            val dryRun = if (route.autoPurchaseDryRun) ", dry-run" else ""
+            "\n🛒 Авторезерв: ВКЛ (поезда $trains, классы ${route.serviceClassesFormatted}$dryRun)"
         } else {
             "\n🛒 Авторезерв: ВЫКЛ"
         }
@@ -136,7 +139,23 @@ class RouteDetailsActivity : AppCompatActivity() {
             deleteRoute()
         }
 
+        binding.buttonCopyLogs.setOnClickListener {
+            copyVisibleLogs()
+        }
+
         updateRouteStatus()
+    }
+
+    private fun copyVisibleLogs() {
+        val text = binding.logTextView.text?.toString().orEmpty()
+        if (text.isBlank()) {
+            Toast.makeText(this, "Логи пустые", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("TrainChecker logs", text))
+        Toast.makeText(this, "Логи скопированы", Toast.LENGTH_SHORT).show()
     }
 
     private fun updateRouteStatus() {

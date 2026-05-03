@@ -38,6 +38,16 @@
             android:singleLine="true"
             android:textColor="@color/text_hint"
             android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonStopBooking"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="8dp"
+            android:text="Stop booking"
+            android:textAllCaps="false"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <ProgressBar

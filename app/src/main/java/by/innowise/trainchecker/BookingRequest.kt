@@ -74,7 +74,8 @@ data class BookingRequest(
                 passengerDocumentNumber = route.passengerDocumentNumber,
                 telegramToken = route.telegramToken,
                 chatId = route.chatId,
-                isRenewal = isRenewal
+                isRenewal = isRenewal,
+                dryRun = route.autoPurchaseDryRun
             )
         }
 

@@ -58,6 +58,10 @@
             android:name=".MonitorService"
             android:exported="true"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".BookingForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>
