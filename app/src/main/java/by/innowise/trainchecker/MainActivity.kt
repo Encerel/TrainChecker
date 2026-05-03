@@ -8,9 +8,12 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -50,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermissionIfNeeded()
+        requestBatteryOptimizationExemptionIfNeeded()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -163,6 +167,40 @@ class MainActivity : AppCompatActivity() {
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun requestBatteryOptimizationExemptionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) return
+
+        val prefs = getSharedPreferences("system_prompts", MODE_PRIVATE)
+        if (prefs.getBoolean("battery_optimization_prompt_shown", false)) return
+
+        AlertDialog.Builder(this)
+            .setTitle("Фоновая работа")
+            .setMessage("Для WebView-бронирования поверх заблокированного экрана лучше отключить оптимизацию батареи для TrainChecker.")
+            .setPositiveButton("Открыть") { _, _ ->
+                prefs.edit().putBoolean("battery_optimization_prompt_shown", true).apply()
+                openBatteryOptimizationSettings()
+            }
+            .setNegativeButton("Позже") { _, _ ->
+                prefs.edit().putBoolean("battery_optimization_prompt_shown", true).apply()
+            }
+            .show()
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        val intent = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:$packageName")
+        )
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
     }
 

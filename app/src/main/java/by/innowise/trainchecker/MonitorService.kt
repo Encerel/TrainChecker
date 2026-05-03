@@ -5,13 +5,16 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,6 +41,7 @@ class MonitorService : Service() {
         const val NOTIF_ID = 1
         private const val CART_RESERVATION_TIMEOUT_MS = 20 * 60 * 1000L
         private const val CART_RESERVATION_GRACE_MS = 10 * 1000L
+        private const val BOOKING_WEBVIEW_TIMEOUT_MS = 30 * 60 * 1000L
 
         fun getActiveRoutes(context: Context): List<Long> {
             val prefs = context.getSharedPreferences("monitor_service", Context.MODE_PRIVATE)
@@ -56,12 +60,23 @@ class MonitorService : Service() {
     private val notificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
+    private val bookingResultReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == BookingWebViewActivity.ACTION_BOOKING_RESULT) {
+                handleBookingResult(intent)
+            }
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            bookingResultReceiver,
+            IntentFilter(BookingWebViewActivity.ACTION_BOOKING_RESULT)
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -186,7 +201,7 @@ class MonitorService : Service() {
                                     message = "Запуск авторезерва для поезда ${route.trainNumber}...",
                                     category = MonitoringLogCategory.AUTO_PURCHASE
                                 )
-                                attemptAutoPurchase(route)
+                                attemptAutoPurchaseWebView(route)
                             }
                         }
                         lastStatus = true
@@ -282,6 +297,78 @@ class MonitorService : Service() {
         getSharedPreferences("monitor_service", Context.MODE_PRIVATE).edit()
             .remove("active_routes")
             .apply()
+    }
+
+    private fun attemptAutoPurchaseWebView(route: MonitoringRoute, isRenewal: Boolean = false) {
+        if (activeAutoPurchases[route.id]?.isActive == true) {
+            sendLog(
+                routeId = route.id,
+                message = "Авторезерв уже выполняется, повторный запуск пропущен",
+                category = MonitoringLogCategory.AUTO_PURCHASE
+            )
+            return
+        }
+
+        val job = serviceScope.launch {
+            try {
+                val currentRoute = getActiveAutoPurchaseRoute(route.id)
+                if (currentRoute == null) {
+                    sendLog(
+                        routeId = route.id,
+                        message = "Авторезерв отменен: маршрут остановлен или авторезерв выключен",
+                        level = MonitoringLogLevel.WARNING,
+                        category = MonitoringLogCategory.AUTO_PURCHASE
+                    )
+                    return@launch
+                }
+
+                val startMessage = if (isRenewal) {
+                    "Повторный авторезерв: запуск WebView после окончания брони..."
+                } else {
+                    "Авторезерв: запуск WebView-сценария..."
+                }
+                sendLog(
+                    routeId = route.id,
+                    message = startMessage,
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+
+                val resolvedAutoPurchase = resolveAutoPurchaseRoute(currentRoute) ?: return@launch
+                BookingCoordinator.start(
+                    context = this@MonitorService,
+                    route = resolvedAutoPurchase.route,
+                    rwPassword = resolvedAutoPurchase.password,
+                    isRenewal = isRenewal
+                )
+                sendLog(
+                    routeId = route.id,
+                    message = "WebView-сценарий бронирования запущен. Ожидаю результат от Activity.",
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+
+                delay(BOOKING_WEBVIEW_TIMEOUT_MS)
+                sendLog(
+                    routeId = route.id,
+                    message = "WebView-сценарий не прислал результат за 30 минут",
+                    level = MonitoringLogLevel.ERROR,
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e("MonitorService", "WebView auto purchase error", e)
+                sendLog(
+                    routeId = route.id,
+                    message = "Авторезерв WebView ИСКЛЮЧЕНИЕ: ${e.message}",
+                    level = MonitoringLogLevel.ERROR,
+                    category = MonitoringLogCategory.AUTO_PURCHASE
+                )
+            } finally {
+                if (activeAutoPurchases[route.id] == this.coroutineContext[Job]) {
+                    activeAutoPurchases.remove(route.id)
+                }
+            }
+        }
+        activeAutoPurchases[route.id] = job
     }
 
     private fun attemptAutoPurchase(route: MonitoringRoute, isRenewal: Boolean = false) {
@@ -463,7 +550,7 @@ class MonitorService : Service() {
                     message = "Срок брони истек. Пробую зарезервировать билет снова...",
                     category = MonitoringLogCategory.AUTO_PURCHASE
                 )
-                attemptAutoPurchase(currentRoute, isRenewal = true)
+                attemptAutoPurchaseWebView(currentRoute, isRenewal = true)
             } finally {
                 if (autoPurchaseRenewals[route.id] == this.coroutineContext[Job]) {
                     autoPurchaseRenewals.remove(route.id)
@@ -481,6 +568,37 @@ class MonitorService : Service() {
                     route.autoPurchaseEnabled &&
                     route.trainNumber.isNotEmpty()
             }
+    }
+
+    private fun handleBookingResult(intent: Intent) {
+        val routeId = intent.getLongExtra(BookingWebViewActivity.EXTRA_ROUTE_ID, -1L)
+        if (routeId == -1L) return
+
+        val success = intent.getBooleanExtra(BookingWebViewActivity.EXTRA_SUCCESS, false)
+        val message = intent.getStringExtra(BookingWebViewActivity.EXTRA_MESSAGE).orEmpty()
+        val state = intent.getStringExtra(BookingWebViewActivity.EXTRA_STATE).orEmpty()
+
+        activeAutoPurchases[routeId]?.cancel()
+        activeAutoPurchases.remove(routeId)
+
+        if (success) {
+            sendLog(
+                routeId = routeId,
+                message = "Авторезерв WebView УСПЕШЕН: $message",
+                level = MonitoringLogLevel.SUCCESS,
+                category = MonitoringLogCategory.AUTO_PURCHASE
+            )
+            getActiveAutoPurchaseRoute(routeId)?.let { currentRoute ->
+                scheduleAutoPurchaseRenewal(currentRoute)
+            }
+        } else {
+            sendLog(
+                routeId = routeId,
+                message = "Авторезерв WebView ОШИБКА на шаге $state: $message",
+                level = MonitoringLogLevel.ERROR,
+                category = MonitoringLogCategory.AUTO_PURCHASE
+            )
+        }
     }
 
     private fun cancelAutoPurchaseJobs(routeId: Long) {
@@ -628,6 +746,7 @@ class MonitorService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(bookingResultReceiver)
         stopAllMonitoring()
         serviceJob.cancel()
     }
